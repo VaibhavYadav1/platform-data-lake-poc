@@ -4,7 +4,13 @@ POC 2 (Phase 2) of the Store Alert Data Lake: a centralized, read-only BigQuery 
 The plan is `GKS-POC-Phase2-detailed-plan.md`. Every folder has a `README.md` with its owner, its tasks and the
 files that go there.
 
-- **Sandbox:** project `data-lake-poc-512405`, region `us-central1`. Generated data only.
+- **Dev project:** `gks-datalake-poc2-dev` ("GKS Data Lake POC2 - Dev"), region `us-central1`. Generated data only.
+  Terraform state: `gs://gks-datalake-poc2-dev-tfstate` (versioned), one prefix per root module (`shared`, `env/dev`).
+  `int` will get its own project, `gks-datalake-poc2-int`.
+- **Phase 1 sandbox:** `data-lake-poc-512405` stays as it is. POC 2 does not deploy there.
+- **Setup:** Terraform `~> 1.17` (`winget install Hashicorp.Terraform`), the gcloud CLI (`winget install Google.CloudSDK`),
+  then `gcloud auth login`, `gcloud auth application-default login` and
+  `gcloud config set project gks-datalake-poc2-dev`.
 - **Environments:** `dev` and `int`, from the same Terraform and dbt code.
 - **Simulator:** lives in `data-gen-upload-data-lake-poc/simulator/`, not here.
 
