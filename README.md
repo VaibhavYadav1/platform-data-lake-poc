@@ -12,7 +12,8 @@ files that go there.
   then `gcloud auth login`, `gcloud auth application-default login` and
   `gcloud config set project gks-datalake-poc2-dev`.
 - **Environments:** `dev` and `int`, from the same Terraform and dbt code.
-- **Simulator:** lives in `data-gen-upload-data-lake-poc/simulator/`, not here.
+- **Simulator:** lives here, in `simulator/`. The Phase 1 repos (`data-gen-upload-data-lake-poc` and the rest) are
+  read-only: Phase 2 changes nothing there.
 
 ## Layout and owners
 
@@ -34,6 +35,7 @@ files that go there.
 | `orchestration/` | Workflows, `publish.py` | Dev 4 (Dev 2: night-off, morning-on) |
 | `orchestration/publish/policies` | Row access policies | Dev 2 |
 | `orchestration/publish/objects` | Native materialized views | Dev 1 |
+| `simulator/` | `poc-source-simulator`: G2, case events, CRM exports, `sim_g2_datalake` | Dev 3 |
 | `loaders/crm` | `poc-crm-loader` | Dev 3 |
 | `apps/tenant_reader` | Per-tenant test application | Dev 2 |
 | `sql/g2` | G2 schema and replication | Dev 3 (schema), Dev 2 (replication) |

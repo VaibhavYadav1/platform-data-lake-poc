@@ -377,6 +377,7 @@ platform-data-lake-poc/
 │   ├── night_off.workflow.yaml  morning_on.workflow.yaml
 │   └── publish/          publish.py  tables.yaml  config.dev.yaml  config.int.yaml
 │                         policies/*.sql  objects/*.sql  tests/
+├── simulator/            poc-source-simulator (Python, Dockerfile, expected/, tests)
 ├── loaders/crm/          poc-crm-loader (Python, Dockerfile, tests)
 ├── apps/tenant_reader/   test application (Python command line)
 ├── sql/g2/               schema.sql  replication.sql
@@ -386,8 +387,9 @@ platform-data-lake-poc/
                           benchmark-results.md  cost-model.md  runbook.md
 ```
 
-The simulator lives in `data-gen-upload-data-lake-poc`, in a new `simulator/` package with its own Dockerfile.
-The existing upload function there doesn't change.
+The simulator lives in this repo, in `simulator/`, with its own Dockerfile. The Phase 1 repos, including
+`data-gen-upload-data-lake-poc`, are read-only: Phase 2 changes nothing there. The seed reuses POC 1's generator
+as a copy of `generate_synthetic_data.py`, taken at commit `4edc2ba` and never edited.
 
 ### 4.6 Conventions
 
@@ -501,7 +503,7 @@ POC 1's data is generated and reproducible, so we rebuild it from one known batc
 
 **0.6 Simulator, scripted mode (Dev 3)**
 
-Command line, in `data-gen-upload-data-lake-poc/simulator/`:
+Command line, in `simulator/` of this repo:
 
 ```
 python -m simulator seed --batch <folder from 0.3>   # schema check, reference data, POC 1 incidents and history
