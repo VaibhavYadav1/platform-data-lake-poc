@@ -584,6 +584,32 @@ The `is_customer` flag is derived from the shared customer definition. It must n
 
 If the CRM provides an unknown customer type code, set the enum to `UNKNOWN`, set `is_customer = false`, and record the issue through DQ36.
 
+## 6.5 Entity relationship diagrams
+
+The HTML version of this guide draws two diagrams. The first shows the CRM source entities and how they link to the G2 stores and devices. The second shows the warehouse tables that POC B produces and how they connect to the tenant access mapping.
+
+<!-- erd -->
+
+## 6.6 Table relationships
+
+Every link between the tables of POC B. Keys are declared in the model and tested by dbt; BigQuery does not enforce them. The last column says which check catches a broken link.
+
+| Parent · key | Child · column | In plain words | Checked by |
+|---|---|---|---|
+| `map_customer_type` · `customer_type_code` | CRM account · `customer_type_code` | Every account has one type; a code that is not in the seed becomes `UNKNOWN` and is never a customer | DQ36 |
+| CRM account · `account_id` | CRM account · `parent_account_id` | An account has at most one parent; an empty parent means a top-level account, which is a tenant | DQ45 (proposed) |
+| CRM account · `account_id` | CRM store · `account_id` | An account owns many stores | DQ46 (proposed) |
+| CRM account · `account_id` | CRM work order · `account_id` | An account has many work orders; it should equal the account of the work order's CRM store | DQ47 (proposed) |
+| CRM store · `crm_store_id` | CRM work order · `crm_store_id` | A CRM store record has many work orders | DQ47 (proposed) |
+| G2 store · `store_id` | CRM store · `g2_store_id` | A G2 store should have one Active CRM store record; none means no tenant, and more than one is flagged | DQ37, DQ46 (proposed) |
+| G2 device · `device_id` | CRM work order · `g2_device_id` | A work order is for one device, or for none (empty) | DQ47 (proposed) |
+| `dim_account` · `tenant_id` | `dim_store` · `tenant_id` | A store belongs to one tenant (its top-level account), or to none | DQ37 |
+| `dim_account` · `tenant_id` | `map_tenant_access` · `tenant_id` | Every tenant a principal can see must be a customer account | AT-19 check 2 |
+| `dim_account` · `account_id` | `fct_work_order` · `account_id` | An account has many work orders | dbt relationships test |
+| `dim_store` · `store_id` | `fct_work_order` · `store_id` | A store has many work orders | DQ47 (proposed) |
+| `dim_device` · `device_id` | `fct_work_order` · `device_id` | Optional: empty when the work is not on one device | DQ47 (proposed) |
+| `raw_crm.load_log` · `export_ts` | landing tables · `export_ts` | One export folder has many rows in each landing table; the loader deletes a failed folder's rows by this value | AT-20 |
+
 ---
 
 # 7. Customer Classification

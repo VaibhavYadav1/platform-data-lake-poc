@@ -1,0 +1,2234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>POC B CRM Data Model and Integration</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="POC B of the Store Alert Data Lake Phase 2: requirements, dependencies, architecture, technical design and a step-by-step execution guide for one source of record for customers (CRM exports, loader, change-size guard, customer definition, tenant assignment, work-order fact).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87.5,500;87.5,700;87.5,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Same design family as GKS-POC-Phase2-schema.html: same tokens, same three faces.
+   Layout: sticky contents rail + one reading column; tables, diagrams and code scroll inside their own boxes.
+   Layer colour = where a thing lives (G2 database, CRM, raw, staging, fact, ops). */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface-2:#eaeef3; --ink:#16202b; --muted:#566271; --line:#d5dbe3; --edge:#8e99a7;
+  --accent:#1c5a94; --accent-soft:#dce8f4;
+  --g2:#22708f; --crm:#7a4aa8; --raw:#687482; --stg:#6b6a1e; --evt:#ab4527; --lake:#966010; --dim:#2f58b0; --fct:#0d7565; --pend:#7a7184; --ops:#4a5a78;
+  --red:#bf3626; --yellow:#a87d00; --green:#2b7a4c; --on-layer:#ffffff;
+  --mark:#ffe58a; --mark-ink:#16202b;
+  --code-bg:#101821; --code-ink:#d6e0ea; --code-muted:#7f8fa1;
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --toc-w:258px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1218; --surface:#141b23; --surface-2:#1a232d; --ink:#e2e8ee; --muted:#96a2af; --line:#28333f; --edge:#5f6c7a;
+  --accent:#6ea9e2; --accent-soft:#1a2c40;
+  --g2:#5fb6d8; --crm:#b48ae0; --raw:#8b96a3; --stg:#bdbb5c; --evt:#ec7b5a; --lake:#d49b40; --dim:#7c9cf0; --fct:#3db29f; --pend:#a89fb3; --ops:#9fb0cf;
+  --red:#ee6a5c; --yellow:#e0b73a; --green:#5bc085; --on-layer:#0d1218;
+  --mark:#7a6412; --mark-ink:#fff6d6;
+  --code-bg:#0a0f14; --code-ink:#d6e0ea; --code-muted:#728294; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0d1218; --surface:#141b23; --surface-2:#1a232d; --ink:#e2e8ee; --muted:#96a2af; --line:#28333f; --edge:#5f6c7a;
+  --accent:#6ea9e2; --accent-soft:#1a2c40;
+  --g2:#5fb6d8; --crm:#b48ae0; --raw:#8b96a3; --stg:#bdbb5c; --evt:#ec7b5a; --lake:#d49b40; --dim:#7c9cf0; --fct:#3db29f; --pend:#a89fb3; --ops:#9fb0cf;
+  --red:#ee6a5c; --yellow:#e0b73a; --green:#5bc085; --on-layer:#0d1218;
+  --mark:#7a6412; --mark-ink:#fff6d6;
+  --code-bg:#0a0f14; --code-ink:#d6e0ea; --code-muted:#728294; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.58;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 80px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:40;background:var(--bg)}
+h1,h2,h3,h4{font-family:var(--f-display);font-stretch:87.5%;text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(32px,5.2vw,50px);font-weight:800;letter-spacing:-.01em}
+h2{font-size:clamp(23px,3vw,28px);font-weight:800}
+h3{font-size:19px;font-weight:700;margin-top:6px}
+h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+p,ul,ol{margin:0}
+code,.mono{font-family:var(--f-mono);font-size:.86em}
+:not(pre)>code{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:0 4px;overflow-wrap:anywhere}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.muted{color:var(--muted)}
+.small{font-size:13.5px}
+mark{background:var(--mark);color:var(--mark-ink);border-radius:2px;padding:0 1px}
+mark.cur{outline:2px solid var(--accent)}
+
+/* ---------- header ---------- */
+.top{max-width:1400px;margin:0 auto;padding-block:40px 26px;display:grid;gap:16px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.subtitle{font-family:var(--f-display);font-stretch:87.5%;font-weight:500;font-size:clamp(17px,2.2vw,21px);color:var(--muted)}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 28px;font-size:13.5px;max-width:1100px}
+.meta div{display:flex;gap:8px;min-width:0}
+.meta dt{color:var(--muted);flex:none}
+.meta dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.stats{display:flex;flex-wrap:wrap;gap:10px 34px;padding-top:16px;border-top:1px solid var(--line);margin:0}
+.stats div{display:grid}
+.stats dt{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.stats dd{margin:0;font-family:var(--f-display);font-stretch:87.5%;font-weight:800;font-size:28px;font-variant-numeric:tabular-nums}
+
+/* ---------- toolbar ---------- */
+.toolbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px))) calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.toolbar .in{max-width:1400px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding-block:8px}
+.search{display:flex;align-items:center;gap:4px;flex:1 1 260px;min-width:0;max-width:440px}
+.search input{flex:1;min-width:0;font:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.search .cnt{font-family:var(--f-mono);font-size:12px;color:var(--muted);min-width:52px;text-align:center}
+.btn{font:inherit;font-size:13px;padding:5px 11px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.btn:hover{border-color:var(--edge)}
+.btn[aria-pressed="true"]{border-color:var(--ink);background:var(--surface-2);font-weight:600}
+.btn.icon{padding:5px 8px}
+.owners{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.owners .lbl{font-size:12px;color:var(--muted);margin-right:2px}
+.tb-right{display:flex;gap:6px;margin-left:auto;align-items:center;flex-wrap:wrap}
+.prog-mini{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+#tocBtn{display:none}
+
+/* ---------- layout ---------- */
+.layout{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:var(--toc-w) minmax(0,1fr);gap:44px;align-items:start}
+.toc{position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto;padding-block:26px 20px;font-size:13.5px;scrollbar-width:thin}
+.toc ol{list-style:none;padding:0;margin:0;display:grid;gap:1px}
+.toc a{display:grid;grid-template-columns:26px 1fr;gap:4px;text-decoration:none;color:var(--muted);padding:4px 8px;border-radius:5px;border-left:2px solid transparent}
+.toc a:hover{color:var(--ink);background:var(--surface-2)}
+.toc a.on{color:var(--ink);border-left-color:var(--accent);background:var(--surface);font-weight:600}
+.toc .n{font-family:var(--f-mono);font-size:11.5px;padding-top:2px}
+.toc .grp{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:12px 8px 4px;font-weight:600}
+main{min-width:0}
+@media (max-width:1080px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  #tocBtn{display:inline-flex}
+  .toc{display:none;position:fixed;z-index:35;top:calc(env(safe-area-inset-top,0px) + 54px);left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));
+    max-height:70vh;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  .toc.open{display:block}
+}
+
+/* ---------- sections ---------- */
+section.doc{padding-block:40px 6px;display:grid;gap:16px;border-top:1px solid var(--line);scroll-margin-top:60px}
+section.doc:first-of-type{border-top:0}
+.sec-head{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.sec-head .no{font-family:var(--f-mono);font-size:13px;color:var(--accent);font-weight:600;min-width:28px}
+.sec-head .src{margin-left:auto;font-size:12.5px;color:var(--muted)}
+.prose{max-width:78ch;display:grid;gap:10px}
+.sub{display:grid;gap:12px;padding-top:10px}
+.sub>h3{display:flex;gap:10px;align-items:baseline}
+.sub>h3 .no{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);font-weight:600}
+.bul{padding-left:20px;display:grid;gap:5px;max-width:80ch}
+.bul li::marker{color:var(--muted)}
+ol.num{padding-left:22px;display:grid;gap:5px;max-width:80ch}
+.cols2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}
+.cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;display:grid;gap:8px;align-content:start;min-width:0}
+.panel h4{margin-bottom:2px}
+.kicker{font-size:17px;max-width:72ch}
+
+/* callouts: kind encoded by the label and the edge colour */
+.note{border:1px solid var(--line);border-left:4px solid var(--c,var(--accent));background:var(--surface);border-radius:6px;padding:12px 14px;display:grid;gap:6px;max-width:92ch;min-width:0}
+.note>b:first-child{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--c,var(--accent))}
+.note.warn{--c:var(--yellow)} .note.risk{--c:var(--red)} .note.dec{--c:var(--green)} .note.sug{--c:var(--lake)} .note.info{--c:var(--accent)}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;line-height:1;padding:4px 7px;border-radius:999px;border:1px solid var(--c,var(--line));color:var(--c,var(--muted));background:var(--surface);white-space:nowrap;vertical-align:1px}
+.pill.plan{--c:var(--green)} .pill.sug{--c:var(--lake)} .pill.ver{--c:var(--yellow)} .pill.open{--c:var(--red)} .pill.sch{--c:var(--dim)} .pill.ext{--c:var(--pend)}
+.pill.own{--c:var(--muted);font-family:var(--f-mono);font-weight:600}
+.pill.task{--c:var(--accent);font-family:var(--f-mono)}
+.pill.gate{--c:var(--ops);font-family:var(--f-mono)}
+
+/* tables */
+.tscroll{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font-weight:600;text-align:left;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--surface-2);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+td code.w{white-space:normal}
+td.nw{white-space:nowrap}
+tr.sect td{background:var(--surface-2);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ownable{transition:opacity .15s}
+body[data-me] .ownable{opacity:.33}
+body[data-me="d1"] .ownable[data-own~="d1"],body[data-me="d2"] .ownable[data-own~="d2"],body[data-me="d3"] .ownable[data-own~="d3"],
+body[data-me="d4"] .ownable[data-own~="d4"],body[data-me="d5"] .ownable[data-own~="d5"]{opacity:1}
+body[data-me="d1"] tr.ownable[data-own~="d1"] td,body[data-me="d2"] tr.ownable[data-own~="d2"] td,body[data-me="d3"] tr.ownable[data-own~="d3"] td,
+body[data-me="d4"] tr.ownable[data-own~="d4"] td,body[data-me="d5"] tr.ownable[data-own~="d5"] td{background:var(--accent-soft)}
+
+/* code blocks (built from <script type="text/plain" class="code">) */
+figure.code{margin:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--code-bg);min-width:0;max-width:100%}
+figure.code figcaption{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 8px 6px 12px;background:var(--surface-2);border-bottom:1px solid var(--line);font-size:12.5px}
+figure.code figcaption .fn{font-family:var(--f-mono);font-size:12px;color:var(--ink);overflow-wrap:anywhere;min-width:0}
+figure.code figcaption .lang{font-family:var(--f-mono);font-size:11px;color:var(--muted);text-transform:uppercase}
+figure.code figcaption .btn{margin-left:auto;padding:3px 9px;font-size:12px}
+figure.code pre{margin:0;padding:12px 14px;overflow-x:auto;color:var(--code-ink);font-family:var(--f-mono);font-size:12.5px;line-height:1.55;tab-size:2}
+figure.code pre .cm{color:var(--code-muted);font-style:italic}
+
+/* flows */
+.flow{display:flex;flex-wrap:wrap;gap:6px 4px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:7px;background:var(--surface);min-width:0}
+.flow .fnode{font-family:var(--f-mono);font-size:12.5px;padding:5px 9px;border-radius:5px;border:1px solid var(--c,var(--line));border-top-width:3px;background:var(--surface);color:var(--ink);overflow-wrap:anywhere}
+.flow .fnode small{display:block;font-family:var(--f-body);font-size:11px;color:var(--muted)}
+.flow .arr{color:var(--muted);font-size:14px;padding:0 2px}
+.flow .fnode.ext{border-style:dashed}
+.flowlabel{font-size:13px;font-weight:600}
+
+/* architecture diagram */
+.diagram-box{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto;min-width:0}
+.diagram-box svg{display:block;min-width:1000px;width:100%;height:auto}
+.arch .node{cursor:pointer}
+.arch .node rect.box{fill:var(--surface);stroke:var(--c);stroke-width:1.5}
+.arch .node.ext rect.box{stroke-dasharray:5 4}
+.arch .node .band{fill:var(--c)}
+.arch .node:hover rect.box,.arch .node:focus rect.box,.arch .node.sel rect.box{stroke-width:3}
+.arch .nt{font-family:var(--f-body);font-weight:600;font-size:12.5px;fill:var(--ink)}
+.arch .nm{font-family:var(--f-mono);font-size:11px;fill:var(--c)}
+.arch .ns{font-family:var(--f-body);font-size:11px;fill:var(--muted)}
+.arch .lane{font-family:var(--f-body);font-size:10.5px;font-weight:700;letter-spacing:.1em;fill:var(--muted)}
+.arch .lanebg{fill:var(--surface-2);opacity:.5}
+.arch .wire{fill:none;stroke:var(--edge);stroke-width:1.5}
+.arch .wire.dash{stroke-dasharray:5 4}
+.arch .ah{fill:var(--edge)}
+.arch .wl{font-family:var(--f-body);font-size:10.5px;fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+.arch.pathmode .node,.arch.pathmode .wire,.arch.pathmode .wl{opacity:.16}
+.arch.pathmode .on{opacity:1!important}
+.arch .wire.on{stroke:var(--accent);stroke-width:2.6}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);align-items:center}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;background:var(--c);vertical-align:-1px;margin-right:5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.detail{min-height:96px}
+.detail .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13.5px}
+.detail .kv dt{color:var(--muted)}
+.detail .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+
+/* tabs */
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{font:inherit;font-size:13px;padding:7px 12px;border:1px solid transparent;border-bottom:0;border-radius:6px 6px 0 0;background:none;color:var(--muted);cursor:pointer;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:600}
+.tabpanel{padding-top:12px;display:grid;gap:10px;min-width:0}
+
+/* CDC replay */
+.replay{display:grid;gap:12px}
+.replay .ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ct{display:inline-block;font-family:var(--f-mono);font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;color:var(--on-layer);background:var(--c)}
+.ct.INSERT{--c:var(--green)} .ct.UPDATE{--c:var(--accent)} .ct.DELETE{--c:var(--red)}
+tr.fresh td{animation:flash 1.2s ease-out}
+@keyframes flash{from{background:var(--accent-soft)}to{background:transparent}}
+.verdict{font-size:13.5px;padding:8px 10px;border-radius:6px;background:var(--surface-2)}
+
+/* latency bar */
+.lat{display:flex;height:34px;border-radius:6px;overflow:hidden;border:1px solid var(--line);font-size:12px}
+.lat div{display:flex;align-items:center;padding:0 8px;color:var(--on-layer);background:var(--c);white-space:nowrap;overflow:hidden;min-width:0}
+.latscale{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+
+/* gantt */
+.gantt{display:grid;grid-template-columns:minmax(180px,230px) repeat(12,minmax(42px,1fr));min-width:780px;font-size:12.5px}
+.gantt>div{border-bottom:1px solid var(--line);padding:5px 6px;min-height:32px;position:relative}
+.gantt .gh{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;background:var(--surface-2);text-align:center}
+.gantt .gh.gate{box-shadow:inset -3px 0 0 var(--ops)}
+.gantt .gl{font-size:12.5px}
+.gantt .gl code{font-size:11.5px}
+.gantt .bar{position:absolute;top:6px;bottom:6px;border-radius:4px;background:var(--c);color:var(--on-layer);font-family:var(--f-mono);font-size:11px;display:flex;align-items:center;padding:0 6px;cursor:default;z-index:1;white-space:nowrap;overflow:hidden}
+.gantt .gcell.gate{box-shadow:inset -3px 0 0 var(--ops)}
+
+/* runbook */
+.phase{background:var(--surface);border:1px solid var(--line);border-radius:9px;display:grid;min-width:0;scroll-margin-top:64px}
+.phase>header{display:grid;gap:8px;padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+.phase>header .t{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.phase>header .pno{font-family:var(--f-mono);font-size:12.5px;color:var(--accent);font-weight:600}
+.phase>header h3{margin:0}
+.phase .facts{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}
+.phase .facts b{color:var(--ink);font-weight:600}
+.pbar{height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:var(--green);transition:width .2s}
+.phase .body{padding:14px 18px 18px;display:grid;gap:14px;min-width:0}
+ol.steps{list-style:none;counter-reset:st;padding:0;margin:0;display:grid;gap:12px}
+ol.steps>li{counter-increment:st;display:grid;grid-template-columns:24px 30px minmax(0,1fr);gap:0 6px;align-items:start}
+ol.steps>li>input{margin:3px 0 0;width:17px;height:17px;accent-color:var(--green);cursor:pointer}
+ol.steps>li::before{content:counter(st);grid-column:2;grid-row:1;font-family:var(--f-mono);font-size:12px;color:var(--muted);padding-top:2px;text-align:right;padding-right:6px}
+ol.steps>li>input{grid-column:1;grid-row:1}
+ol.steps>li>.sb{grid-column:3;display:grid;gap:8px;min-width:0}
+ol.steps>li>.sb>label{font-weight:600;cursor:pointer}
+ol.steps>li.done>.sb>label{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--edge)}
+.verify{border:1px dashed var(--edge);border-radius:7px;padding:12px 14px;display:grid;gap:8px;min-width:0}
+.verify>b{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.expect{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:7px;background:var(--surface-2);font-size:14px}
+.expect b{color:var(--green);white-space:nowrap}
+.pitfalls{display:grid;gap:6px}
+.overall{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.overall .pbar{flex:1 1 220px;height:9px}
+
+/* checklists (definition of done) */
+.check{list-style:none;padding:0;display:grid;gap:5px}
+.check li{display:flex;gap:9px;align-items:flex-start}
+.check input{margin-top:3px;width:16px;height:16px;accent-color:var(--green);flex:none;cursor:pointer}
+.check label{cursor:pointer}
+.check li.done label{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--edge)}
+
+/* tree */
+pre.tree{margin:0;padding:14px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;line-height:1.6;background:var(--surface);border:1px solid var(--line);border-radius:7px}
+pre.tree .c{color:var(--muted)}
+pre.tree .new{color:var(--green)}
+
+/* glossary */
+.gl-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.gl-tools input{font:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);min-width:0;flex:0 1 320px}
+
+/* AT cards */
+.at{display:grid;gap:10px}
+.at .hd{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.at .hd .id{font-family:var(--f-mono);font-weight:600;color:var(--accent)}
+
+.foot{max-width:1400px;margin:40px auto 0;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.foot p{max-width:100ch}
+
+p.prose{display:block}
+.erd .ent .box{fill:var(--surface);stroke:var(--c);stroke-width:1.5}
+.erd .ent.ext .box{stroke-dasharray:5 4}
+.erd .ent .band{fill:var(--c)}
+.erd .ent .sep{stroke:var(--line);stroke-width:1}
+.erd .et{font-family:var(--f-mono);font-weight:600;font-size:12.5px;fill:var(--ink)}
+.erd .es{font-family:var(--f-body);font-size:10.5px;fill:var(--muted)}
+.erd .cn{font-family:var(--f-mono);font-size:11.5px;fill:var(--ink)}
+.erd .ct2{font-family:var(--f-mono);font-size:10px;fill:var(--muted)}
+.erd .ck{font-family:var(--f-mono);font-size:9.5px;font-weight:700;fill:var(--accent)}
+.erd .wire{fill:none;stroke:var(--edge);stroke-width:1.6}
+.erd .wire.dash{stroke-dasharray:6 4}
+.erd .ah{fill:var(--edge)}
+.erd .wl{font-family:var(--f-body);font-size:10.5px;fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+.diagram-box{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow-x:auto;min-width:0}
+.diagram-box svg{display:block;min-width:1000px;width:100%;height:auto}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="eyebrow">Store Alert Data Lake · Phase 2 · POC B</div>
+  <h1>POC B: CRM Data Model and Integration</h1>
+  <p class="subtitle">Requirements, dependencies, architecture, technical design and a step-by-step execution guide</p>
+  <dl class="meta">
+    <div><dt>Project</dt><dd>Store Alert Data Lake, Phase 2</dd></div>
+    <div><dt>POC</dt><dd>B: one source of record for customers</dd></div>
+    <div><dt>Based on</dt><dd>Approved plan v2.0 (17 Nov 2026)</dd></div>
+    <div><dt>Environment</dt><dd>GCP sandbox <code>data-lake-poc-512405</code>, <code>us-central1</code></dd></div>
+    <div><dt>Technologies</dt><dd>Google Cloud Storage, BigQuery, Cloud Run jobs, Python, dbt, SQL</dd></div>
+  </dl>
+  <dl class="stats">
+    <div><dt>Tasks</dt><dd>10</dd></div>
+    <div><dt>Acceptance tests</dt><dd>3</dd></div>
+    <div><dt>Owners</dt><dd>2</dd></div>
+    <div><dt>Working days</dt><dd>1–8</dd></div>
+    <div><dt>DQ checks</dt><dd>5</dd></div>
+    <div><dt>Change guard</dt><dd>&gt; 50%</dd></div>
+  </dl>
+</header>
+
+<div class="toolbar" role="toolbar" aria-label="Document tools">
+  <div class="in">
+    <button class="btn" id="tocBtn" aria-expanded="false" aria-controls="toc">Contents</button>
+    <div class="search" role="search">
+      <input id="q" type="search" placeholder="Search this guide (e.g. tenant, AT-21)" aria-label="Search this guide" autocomplete="off">
+      <span class="cnt" id="qcnt" aria-live="polite"></span>
+      <button class="btn icon" id="qprev" aria-label="Previous match" title="Previous match">↑</button>
+      <button class="btn icon" id="qnext" aria-label="Next match" title="Next match">↓</button>
+    </div>
+    <div class="owners" role="group" aria-label="Highlight one developer's work">
+      <span class="lbl">Highlight</span>
+      <button class="btn" data-me="" aria-pressed="true">All</button>
+      <button class="btn" data-me="d3" aria-pressed="false">Dev 3</button>
+      <button class="btn" data-me="d5" aria-pressed="false">Dev 5</button>
+      <span class="prog-mini" id="meNote" aria-live="polite"></span>
+    </div>
+    <div class="tb-right">
+      <span class="prog-mini" id="progMini" title="Runbook steps ticked in this browser"></span>
+      <button class="btn" id="themeBtn" aria-label="Switch colour theme">Theme</button>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Contents">
+  <div class="grp">Overview</div>
+  <ol>
+    <li><a href="#s1"><span class="n">1</span><span>Executive summary</span></a></li>
+    <li><a href="#s2"><span class="n">2</span><span>Scope and requirements</span></a></li>
+    <li><a href="#s3"><span class="n">3</span><span>Architecture overview</span></a></li>
+    <li><a href="#s4"><span class="n">4</span><span>Dataset and table dependencies</span></a></li>
+    <li><a href="#s5"><span class="n">5</span><span>Prerequisites and environment</span></a></li>
+  </ol>
+  <div class="grp">Design</div>
+  <ol>
+    <li><a href="#s6"><span class="n">6</span><span>Detailed data model</span></a></li>
+    <li><a href="#s7"><span class="n">7</span><span>Customer classification</span></a></li>
+    <li><a href="#s8"><span class="n">8</span><span>Tenant assignment</span></a></li>
+    <li><a href="#s9"><span class="n">9</span><span>CRM work-order fact</span></a></li>
+    <li><a href="#s10"><span class="n">10</span><span>CRM export simulator (B2)</span></a></li>
+    <li><a href="#s11"><span class="n">11</span><span>CRM loader (B3)</span></a></li>
+    <li><a href="#s12"><span class="n">12</span><span>Change-size guard (B5)</span></a></li>
+  </ol>
+  <div class="grp">Quality and delivery</div>
+  <ol>
+    <li><a href="#s13"><span class="n">13</span><span>Data quality and error handling</span></a></li>
+    <li><a href="#s14"><span class="n">14</span><span>Security and personal data</span></a></li>
+    <li><a href="#s15"><span class="n">15</span><span>Tasks and ownership</span></a></li>
+    <li><a href="#s16"><span class="n">16</span><span>Acceptance tests</span></a></li>
+  </ol>
+  <div class="grp">Build it</div>
+  <ol>
+    <li><a href="#s17"><span class="n">17</span><span>Execution runbook</span></a></li>
+  </ol>
+  <div class="grp">Reference</div>
+  <ol>
+    <li><a href="#s18"><span class="n">18</span><span>Repository structure</span></a></li>
+    <li><a href="#s19"><span class="n">19</span><span>Deliverables</span></a></li>
+    <li><a href="#s20"><span class="n">20</span><span>Definition of done</span></a></li>
+    <li><a href="#s21"><span class="n">21</span><span>Open decisions</span></a></li>
+    <li><a href="#s22"><span class="n">22</span><span>Glossary</span></a></li>
+    <li><a href="#s23"><span class="n">23</span><span>Final understanding</span></a></li>
+  </ol>
+</nav>
+
+<main id="doc">
+
+<div class="note info" style="margin-top:26px">
+  <b>How to read this guide</b>
+  <p>Sections 1–6 explain what POC B is and what it needs. Sections 7–12 are the design of each part. Section 15 gives every task, B1 to B10, in detail. Section 17 is the step-by-step build, with a checkbox per step that this browser remembers. Section 21 separates what the approved plan fixes from what is only proposed. Labels:
+  <span class="pill plan">Approved</span> fixed by the Phase 2 plan ·
+  <span class="pill sug">Proposed</span> a suggestion to confirm ·
+  <span class="pill open">Open</span> not decided yet (section 21).</p>
+</div>
+
+<!-- ======================= 1 ======================= -->
+<section class="doc" id="s1">
+  <div class="sec-head"><span class="no">1</span><h2>Executive summary</h2></div>
+<div class="sub"><h3><span class="no">1.1</span>Purpose</h3>
+<p class="prose">POC B establishes the CRM as the single authoritative source for customer and account information in the Store Alert Data Lake.</p>
+<p class="prose">The objective is to ensure that every customer, store, and work order is associated with a consistent CRM-based definition of the customer. The data warehouse must not independently decide whether an account is a customer. That decision must come from the CRM customer type and status, using one shared business rule.</p>
+<p class="prose">POC B also establishes a stable <code>tenant_id</code> for every customer organization. This identifier will later be used by POC D to enforce tenant-level data isolation.</p>
+</div>
+<div class="sub"><h3><span class="no">1.2</span>Business problem</h3>
+<p class="prose">The warehouse receives operational data from different systems, including G2 and CRM.</p>
+<p class="prose">G2 contains operational store and device information, while CRM contains account ownership, customer classification, store relationships, and work-order information.</p>
+<p class="prose">Without a centralized customer definition, different datasets or models could classify the same organization differently. For example:</p>
+<ul class="bul">
+<li>A customer account should be recognized as a customer.</li>
+<li>A vendor account should not be treated as a customer.</li>
+<li>A partner account should not be treated as a customer.</li>
+<li>A prospect should not be treated as a customer.</li>
+<li>Multiple stores belonging to the same customer organization must resolve to the same tenant.</li>
+</ul>
+<p class="prose">POC B solves this by making CRM the source of truth for customer classification and tenant assignment.</p>
+</div>
+<div class="sub"><h3><span class="no">1.3</span>Expected outcome</h3>
+<p class="prose">At the end of POC B:</p>
+<ol class="num">
+<li>CRM exports are generated hourly.</li>
+<li>CRM exports are automatically loaded into BigQuery.</li>
+<li>Re-running the loader does not load the same export twice.</li>
+<li>Account, store, and work-order records are available through staging and intermediate models.</li>
+<li>A change affecting more than 50% of accounts is held for human review.</li>
+<li>A single customer classification rule is implemented.</li>
+<li><code>dim_account</code> contains standardized CRM account information.</li>
+<li>G2 stores are mapped to their corresponding CRM accounts and top-level CRM accounts.</li>
+<li><code>dim_store</code> is enriched with <code>tenant_id</code> and <code>is_customer_store</code>.</li>
+<li><code>fct_work_order</code> is created.</li>
+<li>AT-19, AT-20, and AT-21 pass.</li>
+</ol>
+</div>
+<div class="sub"><h3><span class="no">1.4</span>POC B in simple terms</h3>
+<p class="prose">Think of CRM as the official customer register.</p>
+<ul class="bul">
+<li>CRM tells us which organizations are customers, vendors, partners, or prospects.</li>
+<li>CRM tells us which account owns a store.</li>
+<li>The account hierarchy tells us which top-level organization the store belongs to.</li>
+<li>The top-level account ID becomes the store's <code>tenant_id</code>.</li>
+<li>That tenant ID becomes the basis for separating customer data in later security implementation.</li>
+</ul>
+<p class="prose">The warehouse therefore has one consistent customer definition instead of independently interpreting customer information in multiple places.</p>
+</div>
+</section>
+<!-- ======================= 2 ======================= -->
+<section class="doc" id="s2">
+  <div class="sec-head"><span class="no">2</span><h2>Scope and requirements</h2></div>
+<div class="sub"><h3><span class="no">2.1</span>In scope</h3>
+<div class="tscroll"><table><thead><tr><th>Area</th><th>Requirement</th></tr></thead><tbody><tr><td>CRM export</td><td>Generate hourly snapshots of accounts, stores, and work orders</td></tr><tr><td>Export integrity</td><td>Generate a manifest containing file names, sizes, and MD5 checksums</td></tr><tr><td>Data ingestion</td><td>Load complete CRM export folders into BigQuery</td></tr><tr><td>Idempotency</td><td>Avoid loading an export folder more than once</td></tr><tr><td>Load tracking</td><td>Maintain a log of export processing status</td></tr><tr><td>Data validation</td><td>Validate manifest completeness, file sizes, and checksums</td></tr><tr><td>Incremental processing</td><td>Maintain current CRM records through watermark-based merges</td></tr><tr><td>Customer classification</td><td>Implement one shared definition of a customer</td></tr><tr><td>Account dimension</td><td>Build <code>dim_account</code> from CRM data</td></tr><tr><td>Tenant assignment</td><td>Map G2 stores to top-level CRM accounts</td></tr><tr><td>Store enrichment</td><td>Add <code>tenant_id</code> and <code>is_customer_store</code> to <code>dim_store</code></td></tr><tr><td>Work orders</td><td>Build <code>fct_work_order</code> from CRM work-order records</td></tr><tr><td>Change protection</td><td>Hold exports when more than half of accounts change</td></tr><tr><td>Testing</td><td>Pass AT-19, AT-20, and AT-21</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">2.2</span>Out of scope</h3>
+<p class="prose">The following are not core POC B deliverables:</p>
+<ul class="bul">
+<li>Replacing the existing G2 ingestion pipeline.</li>
+<li>Creating an entirely new G2 store dimension.</li>
+<li>Creating the core <code>dim_store</code> independently of POC C.</li>
+<li>Implementing tenant row access policies. These belong to POC D.</li>
+<li>Implementing a type-2 history snapshot of <code>dim_store</code>. This is B10 stretch work.</li>
+<li>Integrating a real CRM host database or production CRM change-data-capture system.</li>
+<li>Building a complete CRM application.</li>
+</ul>
+<p class="prose">The POC uses generated CRM exports as a stand-in for the client's actual CRM system.</p>
+</div>
+<div class="sub"><h3><span class="no">2.3</span>Business rules</h3>
+<ol class="num">
+<li>CRM is the authoritative source for customer classification.</li>
+<li>Only an account with customer type <code>CUSTOMER</code> and status <code>Active</code> counts as a customer.</li>
+<li>Vendors, partners, and prospects are not customers.</li>
+<li>Unknown customer type codes must not be classified as customers.</li>
+<li>Every customer tenant is identified using the top-level CRM account ID.</li>
+<li>A G2 store without an active matching CRM store record must not be assigned a tenant.</li>
+<li>Stores associated with non-customer accounts must not be exposed as customer stores.</li>
+<li>Personal contact information must not flow beyond the staging layer in its original form.</li>
+</ol>
+</div>
+</section>
+<!-- ======================= 3 ======================= -->
+<section class="doc" id="s3">
+  <div class="sec-head"><span class="no">3</span><h2>Architecture overview</h2></div>
+<div class="sub"><h3><span class="no">3.1</span>High-level architecture</h3>
+<p class="prose">POC B receives CRM export files through Google Cloud Storage, loads them into BigQuery, transforms the data through dbt, and creates the customer and tenant-related warehouse outputs.</p>
+<div class="flow">
+    <span class="fnode ext" style="--c:var(--crm)">CRM source simulator<small>hourly export</small></span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--raw)">GCS<small>crm/export_ts=…/ + manifest.json</small></span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--ops)">poc-crm-loader<small>validate · guard</small></span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--raw)">raw_crm<small>landing + load_log</small></span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--stg)">stg_crm__*</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--stg)">int_crm__*</span>
+  </div>
+  <div class="flow">
+    <span class="fnode" style="--c:var(--stg)">int_crm__account</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--fct)">dim_account<small>map_customer_type + is_customer()</small></span><span class="arr">·</span>
+    <span class="fnode" style="--c:var(--g2)">raw_g2 stores</span><span class="arr">+</span>
+    <span class="fnode" style="--c:var(--stg)">int_crm__store</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--stg)">int_store__tenant</span><span class="arr">→</span>
+    <span class="fnode ext" style="--c:var(--pend)">dim_store (POC C) + tenant_id</span>
+  </div>
+  <div class="flow">
+    <span class="fnode" style="--c:var(--stg)">int_crm__work_order</span><span class="arr">+</span>
+    <span class="fnode" style="--c:var(--stg)">int_store__tenant</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--fct)">fct_work_order<small>partitioned on opened_date</small></span>
+  </div>
+  <div class="legend" style="margin-top:6px"><span><i style="--c:var(--crm)"></i>CRM</span><span><i style="--c:var(--raw)"></i>Landing</span><span><i style="--c:var(--ops)"></i>Loader</span><span><i style="--c:var(--stg)"></i>Staging and prep</span><span><i style="--c:var(--fct)"></i>Warehouse</span><span><i style="--c:var(--pend)"></i>Other POC</span></div>
+</div>
+<div class="sub"><h3><span class="no">3.2</span>Main components</h3>
+<div class="tscroll"><table><thead><tr><th>Component</th><th>Responsibility</th></tr></thead><tbody><tr><td>CRM source simulator</td><td>Generates hourly account, store, and work-order exports</td></tr><tr><td>Google Cloud Storage</td><td>Stores export folders and manifests</td></tr><tr><td><code>poc-crm-loader</code></td><td>Validates and loads CRM exports</td></tr><tr><td><code>raw_crm</code></td><td>Stores raw CRM export history and load tracking</td></tr><tr><td>Staging models</td><td>Apply data typing and remove or tokenize personal data</td></tr><tr><td>Intermediate models</td><td>Maintain current CRM records through incremental merges</td></tr><tr><td><code>map_customer_type</code></td><td>Defines CRM customer type mappings</td></tr><tr><td><code>is_customer()</code> macro</td><td>Implements the shared customer definition</td></tr><tr><td><code>dim_account</code></td><td>Provides standardized account information</td></tr><tr><td><code>int_store__tenant</code></td><td>Resolves G2 stores to top-level CRM accounts</td></tr><tr><td><code>dim_store</code></td><td>Receives tenant and customer-store information</td></tr><tr><td><code>fct_work_order</code></td><td>Provides CRM work-order information</td></tr></tbody></table></div>
+</div>
+</section>
+<!-- ======================= 4 ======================= -->
+<section class="doc" id="s4">
+  <div class="sec-head"><span class="no">4</span><h2>Dataset and table dependencies</h2></div>
+<p class="prose">POC B is not an isolated pipeline. It consumes existing datasets and produces tables that other POCs require.</p>
+<div class="sub"><h3><span class="no">4.1</span>Upstream dataset dependencies</h3>
+<div class="tscroll"><table><thead><tr><th>Dependency</th><th>Dataset / table / component</th><th>Purpose</th><th>Required before</th></tr></thead><tbody><tr><td>G2 source data</td><td><code>raw_g2</code></td><td>Supplies G2 store records and <code>g2_store_id</code> values</td><td>B7</td></tr><tr><td>CRM export files</td><td>GCS <code>crm/export_ts=*/</code></td><td>Supplies hourly CRM snapshots</td><td>B3</td></tr><tr><td>CRM manifest</td><td><code>manifest.json</code></td><td>Verifies export completeness and file integrity</td><td>B3</td></tr><tr><td>CRM landing tables</td><td><code>raw_crm.account_landing</code>, <code>raw_crm.store_landing</code>, <code>raw_crm.work_order_landing</code></td><td>Store imported CRM records</td><td>B4</td></tr><tr><td>CRM load tracking</td><td><code>raw_crm.load_log</code></td><td>Prevents duplicate loading and tracks load status</td><td>B3</td></tr><tr><td>dbt foundation</td><td>Existing dbt project and configured BigQuery targets</td><td>Provides models, materialisations, tests, and environments</td><td>B4, B6</td></tr><tr><td>Customer type mapping</td><td><code>map_customer_type</code></td><td>Maps CRM type codes to standard classifications</td><td>B6</td></tr><tr><td>Core store dimension</td><td><code>dim_store</code> from POC C task C2</td><td>Provides G2 store dimension to enrich</td><td>B7</td></tr><tr><td>Tenant access mapping</td><td><code>map_tenant_access</code></td><td>Used to validate tenant assignments in AT-19</td><td>B8</td></tr></tbody></table></div>
+<h4>Important distinction: <code>raw_g2</code> versus <code>dim_store</code></h4>
+<ul class="bul">
+<li><code>raw_g2</code> provides the underlying G2 store records used for matching.</li>
+<li><code>dim_store</code> is the warehouse dimension created by POC C, task C2.</li>
+<li>POC B uses G2 data and CRM data to calculate tenant assignment.</li>
+<li>POC B then enriches the existing POC C <code>dim_store</code>.</li>
+</ul>
+<p class="prose">POC B does not create the core <code>dim_store</code> from scratch.</p>
+</div>
+<div class="sub"><h3><span class="no">4.2</span>POC B table inventory</h3>
+<div class="tscroll"><table><thead><tr><th>Layer</th><th>Dataset / table</th><th>Upstream dependency</th><th>Purpose</th></tr></thead><tbody><tr><td>Raw</td><td><code>raw_crm.account_landing</code></td><td><code>account.csv</code></td><td>Stores account export history</td></tr><tr><td>Raw</td><td><code>raw_crm.store_landing</code></td><td><code>store.csv</code></td><td>Stores CRM store export history</td></tr><tr><td>Raw</td><td><code>raw_crm.work_order_landing</code></td><td><code>work_order.csv</code></td><td>Stores work-order export history</td></tr><tr><td>Raw</td><td><code>raw_crm.load_log</code></td><td>CRM loader</td><td>Tracks export processing</td></tr><tr><td>Staging</td><td><code>stg_crm__account</code></td><td><code>raw_crm.account_landing</code></td><td>Types and tokenizes account data</td></tr><tr><td>Staging</td><td><code>stg_crm__store</code></td><td><code>raw_crm.store_landing</code></td><td>Prepares CRM store records</td></tr><tr><td>Staging</td><td><code>stg_crm__work_order</code></td><td><code>raw_crm.work_order_landing</code></td><td>Prepares work-order records</td></tr><tr><td>Intermediate</td><td><code>int_crm__account</code></td><td><code>stg_crm__account</code></td><td>Incrementally merges account changes</td></tr><tr><td>Intermediate</td><td><code>int_crm__store</code></td><td><code>stg_crm__store</code></td><td>Incrementally merges store changes</td></tr><tr><td>Intermediate</td><td><code>int_crm__work_order</code></td><td><code>stg_crm__work_order</code></td><td>Incrementally merges work-order changes</td></tr><tr><td>Intermediate</td><td><code>int_store__tenant</code></td><td><code>raw_g2</code>, <code>int_crm__store</code>, <code>int_crm__account</code>, <code>map_customer_type</code> seed and <code>is_customer()</code> macro (or <code>dim_account</code>)</td><td>Resolves G2 store tenant and customer-store flag</td></tr><tr><td>Warehouse</td><td><code>dim_account</code></td><td><code>int_crm__account</code>, seed, macro</td><td>Standardized account dimension</td></tr><tr><td>Warehouse</td><td><code>dim_store</code> (enriched)</td><td>POC C <code>dim_store</code>, <code>int_store__tenant</code></td><td>Adds tenant and customer-store information</td></tr><tr><td>Warehouse</td><td><code>fct_work_order</code></td><td><code>int_crm__work_order</code>, <code>int_store__tenant</code>, <code>dim_account</code></td><td>Work-order fact</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">4.3</span>Downstream dependencies</h3>
+<div class="tscroll"><table><thead><tr><th>Downstream component</th><th>Depends on POC B outputs</th><th>Purpose</th></tr></thead><tbody><tr><td>POC C – dbt transformation layer</td><td><code>dim_account</code>, enriched <code>dim_store</code>, <code>fct_work_order</code></td><td>Uses standardized customer and tenant information. POC C task C2 creates the core <code>dim_store</code>; POC B task B7 then supplies its tenant columns</td></tr><tr><td>POC D – tenant security</td><td><code>dim_account</code>, <code>dim_store.tenant_id</code>, <code>dim_store.is_customer_store</code>, <code>map_tenant_access</code></td><td>Enforces tenant-level data isolation</td></tr><tr><td>POC E – production orchestration</td><td>CRM loader, CRM models, freshness checks</td><td>Runs and monitors CRM ingestion and transformations</td></tr><tr><td>POC F – performance and cost</td><td>Published warehouse tables, including <code>fct_work_order</code></td><td>Evaluates query performance and cost</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">4.4</span>Table dependency flow</h3>
+<h4>A. Account processing</h4>
+<pre class="tree">account.csv
+    |
+    v
+raw_crm.account_landing
+    |
+    v
+stg_crm__account
+    |
+    v
+int_crm__account
+    |
+    v
+map_customer_type
+    |
+    v
+is_customer() macro
+    |
+    v
+dim_account</pre>
+<h4>B. Store-to-tenant assignment</h4>
+<pre class="tree">raw_g2 G2 stores
+       |
+       | Match using g2_store_id
+       v
+int_crm__store
+       |
+       | Obtain account_id
+       v
+int_crm__account
+       |
+       | Follow parent_account_id
+       v
+Top-level CRM account
+       |
+       | Use top-level account_id as tenant_id
+       | Apply is_customer() to the top-level account
+       v
+int_store__tenant
+       |
+       v
+dim_store (POC C)</pre>
+<h4>C. Work-order processing</h4>
+<pre class="tree">work_order.csv
+       |
+       v
+raw_crm.work_order_landing
+       |
+       v
+stg_crm__work_order
+       |
+       v
+int_crm__work_order
+       |
+       | Resolve tenant_id and store_id
+       | (int_store__tenant)
+       v
+fct_work_order</pre>
+</div>
+<div class="sub"><h3><span class="no">4.5</span>Cross-POC execution dependencies</h3>
+<div class="tscroll"><table><thead><tr><th>Task</th><th>Dependency</th><th>Explanation</th></tr></thead><tbody><tr><td>B1</td><td>None</td><td>CRM export specification can be finalized independently</td></tr><tr><td>B2</td><td>0.6 and B1</td><td>Simulator needs the foundation and export specification</td></tr><tr><td>B3</td><td>B2</td><td>Loader needs generated export folders</td></tr><tr><td>B4</td><td>B3 and 0.4</td><td>Transformation models need loaded data and dbt foundation</td></tr><tr><td>B5</td><td>B3</td><td>Change-size guard is implemented in the loader</td></tr><tr><td>B6</td><td>B1; B4 may be stubbed</td><td>Customer classification can begin before the final account model exists</td></tr><tr><td>B7</td><td>B6 and C2</td><td>Tenant assignment needs account classification and the core store dimension</td></tr><tr><td>B8</td><td>B6 and B7</td><td>Customer definition and tenant assignment must exist before AT-19</td></tr><tr><td>B9</td><td>B4</td><td>Work-order fact requires the intermediate work-order model. Populating <code>tenant_id</code> and <code>store_id</code> also needs the B7 output (<code>int_store__tenant</code>)</td></tr><tr><td>B10</td><td>G7 passed</td><td>Optional type-2 history work</td></tr></tbody></table></div>
+<p class="prose"><b>Parallel work:</b> B6 may start using a stub for B4. B5 can be developed after the loader exists. B7 must wait for B6 and POC C's C2 <code>dim_store</code>.</p>
+</div>
+</section>
+<!-- ======================= 5 ======================= -->
+<section class="doc" id="s5">
+  <div class="sec-head"><span class="no">5</span><h2>Prerequisites and environment setup</h2></div>
+<div class="sub"><h3><span class="no">5.1</span>Foundation prerequisites</h3>
+<p class="prose">The approved plan identifies tasks 0.4, 0.6 and 0.7 as prerequisites for POC B (0.6 for B2, 0.4 for B4, and 0.7 for the shared specifications).</p>
+<div class="tscroll"><table><thead><tr><th>Prerequisite</th><th>Why it is needed</th></tr></thead><tbody><tr><td>0.6 – Foundation/source simulator setup</td><td>Provides the simulator foundation needed by the CRM export writer</td></tr><tr><td>0.7 – Specifications</td><td>Defines the agreed source specifications, schemas, conventions, and type codes</td></tr><tr><td>0.4 – dbt foundation</td><td>Required for staging and intermediate dbt models</td></tr><tr><td>GCS bucket</td><td>Stores CRM export folders</td></tr><tr><td>BigQuery datasets</td><td>Store raw, staging, intermediate, and warehouse data</td></tr><tr><td>Cloud Run job capability</td><td>Runs <code>poc-crm-loader</code></td></tr><tr><td>Service account and IAM configuration</td><td>Allows the loader to access required GCS and BigQuery resources</td></tr><tr><td>Existing <code>raw_g2</code></td><td>Provides G2 store information</td></tr><tr><td>POC C task C2</td><td>Creates the core <code>dim_store</code> needed for B7</td></tr></tbody></table></div>
+<p class="prose">The exact service account names, IAM bindings, environment variable names, and deployment commands are not specified in the approved POC B task notes. They must be taken from the project's actual infrastructure configuration rather than invented.</p>
+</div>
+<div class="sub"><h3><span class="no">5.2</span>Required source schemas</h3>
+<p class="prose">The CRM simulator must produce three files.</p>
+<h4><code>account.csv</code></h4>
+<div class="tscroll"><table><thead><tr><th>Column</th><th>Description</th></tr></thead><tbody><tr><td><code>account_id</code></td><td>Unique CRM account identifier</td></tr><tr><td><code>account_name</code></td><td>Account name</td></tr><tr><td><code>customer_type_code</code></td><td>CRM account classification code</td></tr><tr><td><code>status</code></td><td>Account status</td></tr><tr><td><code>parent_account_id</code></td><td>Parent account reference</td></tr><tr><td><code>primary_contact_name</code></td><td>Primary contact name</td></tr><tr><td><code>primary_contact_email</code></td><td>Primary contact email</td></tr><tr><td><code>updated_at</code></td><td>Time the account record was updated</td></tr><tr><td><code>export_ts</code></td><td>Export timestamp</td></tr></tbody></table></div>
+<h4><code>store.csv</code></h4>
+<div class="tscroll"><table><thead><tr><th>Column</th><th>Description</th></tr></thead><tbody><tr><td><code>crm_store_id</code></td><td>Unique CRM store identifier</td></tr><tr><td><code>account_id</code></td><td>CRM account associated with the store</td></tr><tr><td><code>g2_store_id</code></td><td>Matching G2 store identifier</td></tr><tr><td><code>status</code></td><td>CRM store status</td></tr><tr><td><code>updated_at</code></td><td>Time the store record was updated</td></tr><tr><td><code>export_ts</code></td><td>Export timestamp</td></tr></tbody></table></div>
+<h4><code>work_order.csv</code></h4>
+<div class="tscroll"><table><thead><tr><th>Column</th><th>Description</th></tr></thead><tbody><tr><td><code>work_order_id</code></td><td>Unique work-order identifier</td></tr><tr><td><code>account_id</code></td><td>Associated CRM account</td></tr><tr><td><code>crm_store_id</code></td><td>Associated CRM store</td></tr><tr><td><code>g2_device_id</code></td><td>Associated G2 device identifier</td></tr><tr><td><code>work_type</code></td><td>Work-order category</td></tr><tr><td><code>status</code></td><td>Work-order status</td></tr><tr><td><code>opened_at</code></td><td>Work-order opening timestamp</td></tr><tr><td><code>closed_at</code></td><td>Work-order closing timestamp</td></tr><tr><td><code>updated_at</code></td><td>Time the work order was updated</td></tr><tr><td><code>export_ts</code></td><td>Export timestamp</td></tr></tbody></table></div>
+<h4>Source-data rules</h4>
+<ul class="bul">
+<li>Account records are not deleted; they become <code>Inactive</code>.</li>
+<li>CRM store records include their associated <code>account_id</code>.</li>
+<li><code>g2_store_id</code> is required for the store-matching process.</li>
+<li><code>g2_device_id</code> is part of the work-order source schema.</li>
+<li>The simulator must generate account type and status changes.</li>
+<li>The simulator must be able to plant an unknown customer type code.</li>
+<li>The simulator must support a <code>--big-change</code> option.</li>
+</ul>
+<p class="prose">The ID patterns <code>ACC</code> plus five digits, <code>CST</code> plus five digits, and <code>WO</code> plus six digits appear as proposals in the schema document, not as approved requirements in the task table.</p>
+</div>
+<div class="sub"><h3><span class="no">5.3</span>CRM export folder structure</h3>
+<pre class="tree">crm/
+    export_ts=&lt;timestamp&gt;/
+        account.csv
+        store.csv
+        work_order.csv
+        manifest.json</pre>
+<p class="prose">The manifest must be written last. It must list each export file with its file name, file size, and MD5 checksum.</p>
+<p class="prose">The loader must not process an export until its manifest is available and all listed files pass validation.</p>
+</div>
+</section>
+<!-- ======================= 6 ======================= -->
+<section class="doc" id="s6">
+  <div class="sec-head"><span class="no">6</span><h2>Detailed data model</h2></div>
+<div class="sub"><h3><span class="no">6.1</span>Raw layer – <code>raw_crm</code></h3>
+<p class="prose">The raw layer preserves CRM export history.</p>
+<div class="tscroll"><table><thead><tr><th>Table</th><th>Source</th><th>Purpose</th></tr></thead><tbody><tr><td><code>account_landing</code></td><td><code>account.csv</code></td><td>Raw account export records</td></tr><tr><td><code>store_landing</code></td><td><code>store.csv</code></td><td>Raw CRM store export records</td></tr><tr><td><code>work_order_landing</code></td><td><code>work_order.csv</code></td><td>Raw work-order export records</td></tr><tr><td><code>load_log</code></td><td>Loader execution</td><td>Tracks processing status</td></tr></tbody></table></div>
+<h4>Landing table behaviour</h4>
+<p class="prose">The loader must:</p>
+<ol class="num">
+<li>Load CSV data using explicit schemas.</li>
+<li>Use <code>WRITE_APPEND</code>.</li>
+<li>Skip the CSV header row.</li>
+<li>Preserve the export timestamp.</li>
+<li>Retain export history.</li>
+<li>Record each load in <code>load_log</code>.</li>
+</ol>
+<p class="prose">The raw landing tables are not the final customer or tenant tables. They are the source for downstream transformation.</p>
+<h4>Load log</h4>
+<p class="prose">The approved plan requires a <code>load_log</code> entry containing the export folder, files, row counts, status, and processing time.</p>
+<p class="prose">The exact physical column names and additional metadata fields should be finalized in the implementation.</p>
+<p class="prose">The schema proposal also identifies possible additional fields such as account/store/work-order row counts, change ratio, approval information, error message, and loader execution identifier. These are proposed additions, not mandatory fields explicitly defined by the approved task table.</p>
+<h4>Load statuses</h4>
+<div class="tscroll"><table><thead><tr><th>Status</th><th>Meaning</th></tr></thead><tbody><tr><td><code>LOADED</code></td><td>Export successfully loaded</td></tr><tr><td><code>HELD</code></td><td>Export held for manual approval</td></tr><tr><td><code>FAILED</code></td><td>Export processing failed</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">6.2</span>Staging layer</h3>
+<p class="prose">Models:</p>
+<ul class="bul">
+<li><code>stg_crm__account</code></li>
+<li><code>stg_crm__store</code></li>
+<li><code>stg_crm__work_order</code></li>
+</ul>
+<h4><code>stg_crm__account</code></h4>
+<p class="prose">Responsibilities:</p>
+<ul class="bul">
+<li>Apply appropriate data types.</li>
+<li>Prepare account records for incremental processing.</li>
+<li>Replace <code>primary_contact_name</code> and <code>primary_contact_email</code> with <code>primary_contact_token</code>.</li>
+<li>Remove the original contact name and email columns.</li>
+<li>Preserve required business and lineage fields.</li>
+</ul>
+<p class="prose"><b>Personal-data rule:</b> Contact name and email must not continue into the intermediate or warehouse layers in their original form.</p>
+<h4><code>stg_crm__store</code></h4>
+<ul class="bul">
+<li>Prepare CRM store records.</li>
+<li>Preserve the relationship between <code>crm_store_id</code>, <code>g2_store_id</code>, and <code>account_id</code>.</li>
+<li>Prepare store status and update timestamps for matching and merging.</li>
+</ul>
+<h4><code>stg_crm__work_order</code></h4>
+<ul class="bul">
+<li>Prepare work-order records.</li>
+<li>Preserve account, CRM store, and device references.</li>
+<li>Prepare work-order status and timestamps for downstream fact creation.</li>
+</ul>
+</div>
+<div class="sub"><h3><span class="no">6.3</span>Intermediate layer</h3>
+<p class="prose">Models:</p>
+<ul class="bul">
+<li><code>int_crm__account</code></li>
+<li><code>int_crm__store</code></li>
+<li><code>int_crm__work_order</code></li>
+<li><code>int_store__tenant</code></li>
+</ul>
+<h4>Watermark merge</h4>
+<p class="prose">The approved plan uses incremental dbt models with merge materialisation.</p>
+<p class="prose">Example for <code>int_crm__account</code>:</p>
+<script type="text/plain" class="code" data-lang="sql" data-tag="plan" data-title="dbt/models/intermediate/crm/int_crm__account.sql">{{ config(
+    materialized = 'incremental',
+    incremental_strategy = 'merge',
+    unique_key = 'account_id'
+) }}
+
+select *
+from {{ ref('stg_crm__account') }}
+
+{% if is_incremental() %}
+where updated_at > (
+    select max(updated_at)
+    from {{ this }}
+)
+{% endif %}
+
+qualify row_number() over (
+    partition by account_id
+    order by export_ts desc, updated_at desc
+) = 1</script>
+<h4>Explanation</h4>
+<ul class="bul">
+<li><code>materialized = 'incremental'</code> means the model processes changes rather than rebuilding everything on each run.</li>
+<li><code>incremental_strategy = 'merge'</code> updates existing records and inserts new ones.</li>
+<li><code>unique_key = 'account_id'</code> identifies the account record to merge.</li>
+<li>The watermark uses <code>updated_at</code> to identify newer records.</li>
+<li><code>row_number()</code> selects the latest available version for an account.</li>
+</ul>
+<p class="prose">Equivalent intermediate models are required for CRM stores and work orders.</p>
+<h4>Important watermark consideration</h4>
+<p class="prose">The approved example uses strict <code>updated_at &gt; max(updated_at)</code> filtering.</p>
+<p class="prose">Timestamp ties and late-arriving records should be tested. The example is the approved starting point, but the implementation must verify that the chosen watermark behaviour does not silently miss records with equal timestamps or delayed arrival.</p>
+</div>
+<div class="sub"><h3><span class="no">6.4</span>Warehouse layer – <code>dim_account</code></h3>
+<p class="prose"><code>dim_account</code> is the standardized CRM account dimension.</p>
+<div class="tscroll"><table><thead><tr><th>Column</th><th>Purpose</th></tr></thead><tbody><tr><td><code>account_key</code></td><td>Warehouse account key</td></tr><tr><td><code>account_id</code></td><td>CRM account identifier</td></tr><tr><td><code>tenant_id</code></td><td>Top-level CRM account ID</td></tr><tr><td><code>account_name</code></td><td>Account name</td></tr><tr><td><code>customer_type_code</code></td><td>Original CRM type code</td></tr><tr><td><code>customer_type_enum</code></td><td>Standardized type</td></tr><tr><td><code>customer_type_name</code></td><td>Readable type name</td></tr><tr><td><code>is_customer</code></td><td>Customer classification flag</td></tr><tr><td><code>status</code></td><td>CRM account status</td></tr><tr><td><code>parent_account_id</code></td><td>Parent CRM account</td></tr><tr><td><code>primary_contact_token</code></td><td>Tokenized primary contact reference</td></tr><tr><td>Lineage columns</td><td>Source and processing lineage</td></tr></tbody></table></div>
+<p class="prose">The <code>is_customer</code> flag is derived from the shared customer definition. It must not be independently calculated using different rules in different models.</p>
+<p class="prose">If the CRM provides an unknown customer type code, set the enum to <code>UNKNOWN</code>, set <code>is_customer = false</code>, and record the issue through DQ36.</p>
+</div>
+<div class="sub"><h3><span class="no">6.5</span>Entity relationship diagrams</h3>
+<p class="prose">The HTML version of this guide draws two diagrams. The first shows the CRM source entities and how they link to the G2 stores and devices. The second shows the warehouse tables that POC B produces and how they connect to the tenant access mapping.</p>
+<h4>Diagram 1: CRM source entities and their links to G2</h4><p class="small muted prose">Solid arrows are keys (one to many, parent to child). Dashed boxes belong to POC A or POC C.</p><div class="diagram-box"><svg class="erd" viewBox="0 0 1000 720" role="img" aria-label="Entity relationship diagram of the CRM account, store and work order, linked to G2 stores and devices"><defs><marker id="erda" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs><path class="wire" d="M270,72 H340" marker-end="url(#erda)"/><text class="wl" x="305" y="66" text-anchor="middle">1 : N</text><path class="wire" d="M600,160 H630 V72 H600" marker-end="url(#erda)"/><text class="wl" x="636" y="116" text-anchor="start">parent (1 : N)</text><path class="wire" d="M400,242 V300" marker-end="url(#erda)"/><text class="wl" x="408" y="286" text-anchor="start">1 : N</text><path class="wire" d="M400,446 V470" marker-end="url(#erda)"/><text class="wl" x="408" y="456" text-anchor="start">1 : N</text><path class="wire" d="M340,138 H312 V534 H340" marker-end="url(#erda)"/><text class="wl" x="306" y="330" text-anchor="end">1 : N</text><path class="wire" d="M600,386 H730" marker-end="url(#erda)"/><text class="wl" x="665" y="380" text-anchor="middle">N : 1 (one Active)</text><path class="wire" d="M600,578 H730" marker-end="url(#erda)"/><text class="wl" x="665" y="572" text-anchor="middle">N : 1 (optional)</text><path class="wire" d="M850,470 V402" marker-end="url(#erda)"/><text class="wl" x="858" y="440" text-anchor="start">device in store</text><g class="ent" style="--c:var(--stg)">
+<rect class="box" x="20" y="30" width="250" height="124" rx="6"/>
+<rect class="band" x="20" y="30" width="4" height="124"/>
+<text class="et" x="32" y="45">map_customer_type</text>
+<text class="es" x="32" y="57">dbt seed · 4 rows</text>
+<line class="sep" x1="20" y1="60" x2="270" y2="60"/>
+<text class="cn" x="32" y="75">customer_type_code</text>
+<text class="ct2" x="262" y="75" text-anchor="end">STRING</text>
+<text class="ck" x="216" y="75" text-anchor="end">PK</text>
+<text class="cn" x="32" y="97">customer_type_enum</text>
+<text class="ct2" x="262" y="97" text-anchor="end">STRING</text>
+<text class="cn" x="32" y="119">customer_type_name</text>
+<text class="ct2" x="262" y="119" text-anchor="end">STRING</text>
+<text class="cn" x="32" y="141">counts_as_customer</text>
+<text class="ct2" x="262" y="141" text-anchor="end">BOOL</text>
+</g>
+<g class="ent" style="--c:var(--crm)">
+<rect class="box" x="340" y="30" width="260" height="212" rx="6"/>
+<rect class="band" x="340" y="30" width="4" height="212"/>
+<text class="et" x="352" y="45">CRM account</text>
+<text class="es" x="352" y="57">account.csv → int_crm__account</text>
+<line class="sep" x1="340" y1="60" x2="600" y2="60"/>
+<text class="cn" x="352" y="75">account_id</text>
+<text class="ct2" x="592" y="75" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="75" text-anchor="end">PK</text>
+<text class="cn" x="352" y="97">account_name</text>
+<text class="ct2" x="592" y="97" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="119">customer_type_code</text>
+<text class="ct2" x="592" y="119" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="119" text-anchor="end">FK</text>
+<text class="cn" x="352" y="141">status</text>
+<text class="ct2" x="592" y="141" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="163">parent_account_id</text>
+<text class="ct2" x="592" y="163" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="163" text-anchor="end">FK</text>
+<text class="cn" x="352" y="185">primary_contact_token</text>
+<text class="ct2" x="592" y="185" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="207">updated_at</text>
+<text class="ct2" x="592" y="207" text-anchor="end">TIMESTAMP</text>
+<text class="cn" x="352" y="229">export_ts</text>
+<text class="ct2" x="592" y="229" text-anchor="end">TIMESTAMP</text>
+</g>
+<g class="ent" style="--c:var(--crm)">
+<rect class="box" x="340" y="300" width="260" height="146" rx="6"/>
+<rect class="band" x="340" y="300" width="4" height="146"/>
+<text class="et" x="352" y="315">CRM store</text>
+<text class="es" x="352" y="327">store.csv → int_crm__store</text>
+<line class="sep" x1="340" y1="330" x2="600" y2="330"/>
+<text class="cn" x="352" y="345">crm_store_id</text>
+<text class="ct2" x="592" y="345" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="345" text-anchor="end">PK</text>
+<text class="cn" x="352" y="367">account_id</text>
+<text class="ct2" x="592" y="367" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="367" text-anchor="end">FK</text>
+<text class="cn" x="352" y="389">g2_store_id</text>
+<text class="ct2" x="592" y="389" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="389" text-anchor="end">FK</text>
+<text class="cn" x="352" y="411">status</text>
+<text class="ct2" x="592" y="411" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="433">updated_at</text>
+<text class="ct2" x="592" y="433" text-anchor="end">TIMESTAMP</text>
+</g>
+<g class="ent" style="--c:var(--crm)">
+<rect class="box" x="340" y="470" width="260" height="234" rx="6"/>
+<rect class="band" x="340" y="470" width="4" height="234"/>
+<text class="et" x="352" y="485">CRM work order</text>
+<text class="es" x="352" y="497">work_order.csv → int_crm__work_order</text>
+<line class="sep" x1="340" y1="500" x2="600" y2="500"/>
+<text class="cn" x="352" y="515">work_order_id</text>
+<text class="ct2" x="592" y="515" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="515" text-anchor="end">PK</text>
+<text class="cn" x="352" y="537">account_id</text>
+<text class="ct2" x="592" y="537" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="537" text-anchor="end">FK</text>
+<text class="cn" x="352" y="559">crm_store_id</text>
+<text class="ct2" x="592" y="559" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="559" text-anchor="end">FK</text>
+<text class="cn" x="352" y="581">g2_device_id</text>
+<text class="ct2" x="592" y="581" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="581" text-anchor="end">FK</text>
+<text class="cn" x="352" y="603">work_type</text>
+<text class="ct2" x="592" y="603" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="625">status</text>
+<text class="ct2" x="592" y="625" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="647">opened_at</text>
+<text class="ct2" x="592" y="647" text-anchor="end">TIMESTAMP</text>
+<text class="cn" x="352" y="669">closed_at</text>
+<text class="ct2" x="592" y="669" text-anchor="end">TIMESTAMP</text>
+<text class="cn" x="352" y="691">updated_at</text>
+<text class="ct2" x="592" y="691" text-anchor="end">TIMESTAMP</text>
+</g>
+<g class="ent ext" style="--c:var(--g2)">
+<rect class="box" x="730" y="300" width="240" height="102" rx="6"/>
+<rect class="band" x="730" y="300" width="4" height="102"/>
+<text class="et" x="742" y="315">G2 store</text>
+<text class="es" x="742" y="327">stg_g2__stores (POC A)</text>
+<line class="sep" x1="730" y1="330" x2="970" y2="330"/>
+<text class="cn" x="742" y="345">store_id</text>
+<text class="ct2" x="962" y="345" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="345" text-anchor="end">PK</text>
+<text class="cn" x="742" y="367">store_name</text>
+<text class="ct2" x="962" y="367" text-anchor="end">STRING</text>
+<text class="cn" x="742" y="389">is_active</text>
+<text class="ct2" x="962" y="389" text-anchor="end">BOOL</text>
+</g>
+<g class="ent ext" style="--c:var(--g2)">
+<rect class="box" x="730" y="470" width="240" height="102" rx="6"/>
+<rect class="band" x="730" y="470" width="4" height="102"/>
+<text class="et" x="742" y="485">G2 device</text>
+<text class="es" x="742" y="497">stg_g2__device_locations (POC A)</text>
+<line class="sep" x1="730" y1="500" x2="970" y2="500"/>
+<text class="cn" x="742" y="515">device_id</text>
+<text class="ct2" x="962" y="515" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="515" text-anchor="end">PK</text>
+<text class="cn" x="742" y="537">store_id</text>
+<text class="ct2" x="962" y="537" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="537" text-anchor="end">FK</text>
+<text class="cn" x="742" y="559">installed_location</text>
+<text class="ct2" x="962" y="559" text-anchor="end">STRING</text>
+</g></svg></div><h4>Diagram 2: warehouse tables and the tenant mapping</h4><p class="small muted prose">Solid arrows are keys. Dashed arrows are lineage: the target is built from, or enriched by, the source. Dashed boxes belong to POC C or POC D.</p><div class="diagram-box"><svg class="erd" viewBox="0 0 1000 880" role="img" aria-label="Entity relationship diagram of dim_account, int_store__tenant, dim_store, dim_device, fct_work_order and map_tenant_access"><defs><marker id="erda" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs><path class="wire dash" d="M270,94 H340" marker-end="url(#erda)"/><text class="wl" x="305" y="88" text-anchor="middle">built from</text><path class="wire" d="M600,116 H730" marker-end="url(#erda)"/><text class="wl" x="665" y="110" text-anchor="middle">1 : N (customers only)</text><path class="wire dash" d="M400,242 V300" marker-end="url(#erda)"/><text class="wl" x="408" y="276" text-anchor="start">is_customer() of tenant account</text><path class="wire dash" d="M600,408 H730" marker-end="url(#erda)"/><text class="wl" x="665" y="402" text-anchor="middle">tenant + flag</text><path class="wire dash" d="M400,490 V540" marker-end="url(#erda)"/><text class="wl" x="408" y="520" text-anchor="start">tenant_id, store_id</text><path class="wire" d="M340,94 H312 V626 H340" marker-end="url(#erda)"/><text class="wl" x="306" y="330" text-anchor="end">1 : N</text><path class="wire" d="M730,348 H650 V670 H600" marker-end="url(#erda)"/><text class="wl" x="692" y="344" text-anchor="middle">1 : N</text><path class="wire" d="M730,542 H625 V692 H600" marker-end="url(#erda)"/><text class="wl" x="680" y="536" text-anchor="middle">1 : N (optional)</text><g class="ent" style="--c:var(--stg)">
+<rect class="box" x="20" y="30" width="250" height="124" rx="6"/>
+<rect class="band" x="20" y="30" width="4" height="124"/>
+<text class="et" x="32" y="45">map_customer_type</text>
+<text class="es" x="32" y="57">dbt seed</text>
+<line class="sep" x1="20" y1="60" x2="270" y2="60"/>
+<text class="cn" x="32" y="75">customer_type_code</text>
+<text class="ct2" x="262" y="75" text-anchor="end">STRING</text>
+<text class="ck" x="216" y="75" text-anchor="end">PK</text>
+<text class="cn" x="32" y="97">customer_type_enum</text>
+<text class="ct2" x="262" y="97" text-anchor="end">STRING</text>
+<text class="cn" x="32" y="119">customer_type_name</text>
+<text class="ct2" x="262" y="119" text-anchor="end">STRING</text>
+<text class="cn" x="32" y="141">counts_as_customer</text>
+<text class="ct2" x="262" y="141" text-anchor="end">BOOL</text>
+</g>
+<g class="ent" style="--c:var(--fct)">
+<rect class="box" x="340" y="30" width="260" height="212" rx="6"/>
+<rect class="band" x="340" y="30" width="4" height="212"/>
+<text class="et" x="352" y="45">dim_account</text>
+<text class="es" x="352" y="57">wh_{env} · one row per account</text>
+<line class="sep" x1="340" y1="60" x2="600" y2="60"/>
+<text class="cn" x="352" y="75">account_key</text>
+<text class="ct2" x="592" y="75" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="97">account_id</text>
+<text class="ct2" x="592" y="97" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="97" text-anchor="end">PK</text>
+<text class="cn" x="352" y="119">tenant_id</text>
+<text class="ct2" x="592" y="119" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="141">customer_type_enum</text>
+<text class="ct2" x="592" y="141" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="163">is_customer</text>
+<text class="ct2" x="592" y="163" text-anchor="end">BOOL</text>
+<text class="cn" x="352" y="185">status</text>
+<text class="ct2" x="592" y="185" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="207">parent_account_id</text>
+<text class="ct2" x="592" y="207" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="229">primary_contact_token</text>
+<text class="ct2" x="592" y="229" text-anchor="end">STRING</text>
+</g>
+<g class="ent ext" style="--c:var(--ops)">
+<rect class="box" x="730" y="30" width="240" height="80" rx="6"/>
+<rect class="band" x="730" y="30" width="4" height="80"/>
+<text class="et" x="742" y="45">map_tenant_access</text>
+<text class="es" x="742" y="57">sec_{env} (POC D)</text>
+<line class="sep" x1="730" y1="60" x2="970" y2="60"/>
+<text class="cn" x="742" y="75">principal</text>
+<text class="ct2" x="962" y="75" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="75" text-anchor="end">PK</text>
+<text class="cn" x="742" y="97">tenant_id</text>
+<text class="ct2" x="962" y="97" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="97" text-anchor="end">FK</text>
+</g>
+<g class="ent" style="--c:var(--stg)">
+<rect class="box" x="340" y="300" width="260" height="190" rx="6"/>
+<rect class="band" x="340" y="300" width="4" height="190"/>
+<text class="et" x="352" y="315">int_store__tenant</text>
+<text class="es" x="352" y="327">prep_{env} · one row per G2 store</text>
+<line class="sep" x1="340" y1="330" x2="600" y2="330"/>
+<text class="cn" x="352" y="345">store_id</text>
+<text class="ct2" x="592" y="345" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="345" text-anchor="end">PK</text>
+<text class="cn" x="352" y="367">crm_store_id</text>
+<text class="ct2" x="592" y="367" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="389">account_id</text>
+<text class="ct2" x="592" y="389" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="411">tenant_id</text>
+<text class="ct2" x="592" y="411" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="433">hierarchy_depth</text>
+<text class="ct2" x="592" y="433" text-anchor="end">INT64</text>
+<text class="cn" x="352" y="455">is_customer_store</text>
+<text class="ct2" x="592" y="455" text-anchor="end">BOOL</text>
+<text class="cn" x="352" y="477">tenant_reason</text>
+<text class="ct2" x="592" y="477" text-anchor="end">STRING</text>
+</g>
+<g class="ent ext" style="--c:var(--dim)">
+<rect class="box" x="730" y="300" width="240" height="124" rx="6"/>
+<rect class="band" x="730" y="300" width="4" height="124"/>
+<text class="et" x="742" y="315">dim_store</text>
+<text class="es" x="742" y="327">wh_{env} (POC C, enriched by B7)</text>
+<line class="sep" x1="730" y1="330" x2="970" y2="330"/>
+<text class="cn" x="742" y="345">store_id</text>
+<text class="ct2" x="962" y="345" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="345" text-anchor="end">PK</text>
+<text class="cn" x="742" y="367">tenant_id</text>
+<text class="ct2" x="962" y="367" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="367" text-anchor="end">FK</text>
+<text class="cn" x="742" y="389">is_customer_store</text>
+<text class="ct2" x="962" y="389" text-anchor="end">BOOL</text>
+<text class="cn" x="742" y="411">(G2 store columns)</text>
+<text class="ct2" x="962" y="411" text-anchor="end"></text>
+</g>
+<g class="ent ext" style="--c:var(--dim)">
+<rect class="box" x="730" y="500" width="240" height="80" rx="6"/>
+<rect class="band" x="730" y="500" width="4" height="80"/>
+<text class="et" x="742" y="515">dim_device</text>
+<text class="es" x="742" y="527">wh_{env} (POC C)</text>
+<line class="sep" x1="730" y1="530" x2="970" y2="530"/>
+<text class="cn" x="742" y="545">device_id</text>
+<text class="ct2" x="962" y="545" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="545" text-anchor="end">PK</text>
+<text class="cn" x="742" y="567">store_id</text>
+<text class="ct2" x="962" y="567" text-anchor="end">STRING</text>
+<text class="ck" x="916" y="567" text-anchor="end">FK</text>
+</g>
+<g class="ent" style="--c:var(--fct)">
+<rect class="box" x="340" y="540" width="260" height="300" rx="6"/>
+<rect class="band" x="340" y="540" width="4" height="300"/>
+<text class="et" x="352" y="555">fct_work_order</text>
+<text class="es" x="352" y="567">wh_{env} · partition opened_date</text>
+<line class="sep" x1="340" y1="570" x2="600" y2="570"/>
+<text class="cn" x="352" y="585">work_order_id</text>
+<text class="ct2" x="592" y="585" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="585" text-anchor="end">PK</text>
+<text class="cn" x="352" y="607">tenant_id</text>
+<text class="ct2" x="592" y="607" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="607" text-anchor="end">FK</text>
+<text class="cn" x="352" y="629">account_id</text>
+<text class="ct2" x="592" y="629" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="629" text-anchor="end">FK</text>
+<text class="cn" x="352" y="651">crm_store_id</text>
+<text class="ct2" x="592" y="651" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="673">store_id</text>
+<text class="ct2" x="592" y="673" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="673" text-anchor="end">FK</text>
+<text class="cn" x="352" y="695">device_id</text>
+<text class="ct2" x="592" y="695" text-anchor="end">STRING</text>
+<text class="ck" x="546" y="695" text-anchor="end">FK</text>
+<text class="cn" x="352" y="717">work_type</text>
+<text class="ct2" x="592" y="717" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="739">status</text>
+<text class="ct2" x="592" y="739" text-anchor="end">STRING</text>
+<text class="cn" x="352" y="761">opened_at</text>
+<text class="ct2" x="592" y="761" text-anchor="end">TIMESTAMP</text>
+<text class="cn" x="352" y="783">closed_at</text>
+<text class="ct2" x="592" y="783" text-anchor="end">TIMESTAMP</text>
+<text class="cn" x="352" y="805">opened_date</text>
+<text class="ct2" x="592" y="805" text-anchor="end">DATE</text>
+<text class="ck" x="558" y="805" text-anchor="end">PART</text>
+<text class="cn" x="352" y="827">is_open</text>
+<text class="ct2" x="592" y="827" text-anchor="end">BOOL</text>
+</g></svg></div><div class="legend"><span><svg width="44" height="12" aria-hidden="true"><line x1="0" y1="6" x2="44" y2="6" stroke="var(--edge)" stroke-width="1.6"/></svg>Key, one to many</span><span><svg width="44" height="12" aria-hidden="true"><line x1="0" y1="6" x2="44" y2="6" stroke="var(--edge)" stroke-width="1.6" stroke-dasharray="5 4"/></svg>Lineage: built from</span><span><svg width="22" height="14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" rx="3" fill="none" stroke="var(--edge)" stroke-dasharray="4 3"/></svg>Another POC&#39;s table</span></div>
+</div>
+<div class="sub"><h3><span class="no">6.6</span>Table relationships</h3>
+<p class="prose">Every link between the tables of POC B. Keys are declared in the model and tested by dbt; BigQuery does not enforce them. The last column says which check catches a broken link.</p>
+<div class="tscroll"><table><thead><tr><th>Parent · key</th><th>Child · column</th><th>In plain words</th><th>Checked by</th></tr></thead><tbody><tr><td><code>map_customer_type</code> · <code>customer_type_code</code></td><td>CRM account · <code>customer_type_code</code></td><td>Every account has one type; a code that is not in the seed becomes <code>UNKNOWN</code> and is never a customer</td><td>DQ36</td></tr><tr><td>CRM account · <code>account_id</code></td><td>CRM account · <code>parent_account_id</code></td><td>An account has at most one parent; an empty parent means a top-level account, which is a tenant</td><td>DQ45 (proposed)</td></tr><tr><td>CRM account · <code>account_id</code></td><td>CRM store · <code>account_id</code></td><td>An account owns many stores</td><td>DQ46 (proposed)</td></tr><tr><td>CRM account · <code>account_id</code></td><td>CRM work order · <code>account_id</code></td><td>An account has many work orders; it should equal the account of the work order's CRM store</td><td>DQ47 (proposed)</td></tr><tr><td>CRM store · <code>crm_store_id</code></td><td>CRM work order · <code>crm_store_id</code></td><td>A CRM store record has many work orders</td><td>DQ47 (proposed)</td></tr><tr><td>G2 store · <code>store_id</code></td><td>CRM store · <code>g2_store_id</code></td><td>A G2 store should have one Active CRM store record; none means no tenant, and more than one is flagged</td><td>DQ37, DQ46 (proposed)</td></tr><tr><td>G2 device · <code>device_id</code></td><td>CRM work order · <code>g2_device_id</code></td><td>A work order is for one device, or for none (empty)</td><td>DQ47 (proposed)</td></tr><tr><td><code>dim_account</code> · <code>tenant_id</code></td><td><code>dim_store</code> · <code>tenant_id</code></td><td>A store belongs to one tenant (its top-level account), or to none</td><td>DQ37</td></tr><tr><td><code>dim_account</code> · <code>tenant_id</code></td><td><code>map_tenant_access</code> · <code>tenant_id</code></td><td>Every tenant a principal can see must be a customer account</td><td>AT-19 check 2</td></tr><tr><td><code>dim_account</code> · <code>account_id</code></td><td><code>fct_work_order</code> · <code>account_id</code></td><td>An account has many work orders</td><td>dbt relationships test</td></tr><tr><td><code>dim_store</code> · <code>store_id</code></td><td><code>fct_work_order</code> · <code>store_id</code></td><td>A store has many work orders</td><td>DQ47 (proposed)</td></tr><tr><td><code>dim_device</code> · <code>device_id</code></td><td><code>fct_work_order</code> · <code>device_id</code></td><td>Optional: empty when the work is not on one device</td><td>DQ47 (proposed)</td></tr><tr><td><code>raw_crm.load_log</code> · <code>export_ts</code></td><td>landing tables · <code>export_ts</code></td><td>One export folder has many rows in each landing table; the loader deletes a failed folder's rows by this value</td><td>AT-20</td></tr></tbody></table></div>
+</div>
+</section>
+<!-- ======================= 7 ======================= -->
+<section class="doc" id="s7">
+  <div class="sec-head"><span class="no">7</span><h2>Customer classification</h2></div>
+<div class="sub"><h3><span class="no">7.1</span>Customer type mapping</h3>
+<p class="prose">The dbt seed is <code>seeds/map_customer_type.csv</code>.</p>
+<script type="text/plain" class="code" data-lang="csv" data-tag="plan" data-title="seeds/map_customer_type.csv">customer_type_code,customer_type_enum,customer_type_name,counts_as_customer
+100000000,CUSTOMER,Customer,true
+100000001,VENDOR,Vendor,false
+100000002,PARTNER,Partner,false
+100000003,PROSPECT,Prospect,false</script>
+<div class="tscroll"><table><thead><tr><th>CRM code</th><th>Enum</th><th>Description</th><th>Customer?</th></tr></thead><tbody><tr><td><code>100000000</code></td><td><code>CUSTOMER</code></td><td>Customer</td><td>Yes</td></tr><tr><td><code>100000001</code></td><td><code>VENDOR</code></td><td>Vendor</td><td>No</td></tr><tr><td><code>100000002</code></td><td><code>PARTNER</code></td><td>Partner</td><td>No</td></tr><tr><td><code>100000003</code></td><td><code>PROSPECT</code></td><td>Prospect</td><td>No</td></tr><tr><td>Unknown</td><td><code>UNKNOWN</code></td><td>Unrecognized type</td><td>No</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">7.2</span>Shared <code>is_customer()</code> macro</h3>
+<script type="text/plain" class="code" data-lang="sql" data-tag="plan" data-title="dbt/macros/is_customer.sql">{% macro is_customer(type_enum_col, status_col) -%}
+  (
+    {{ type_enum_col }} = 'CUSTOMER'
+    and {{ status_col }} = 'Active'
+  )
+{%- endmacro %}</script>
+<p class="prose">An account is a customer only if both conditions are true:</p>
+<ol class="num">
+<li>Its standardized type is <code>CUSTOMER</code>.</li>
+<li>Its status is <code>Active</code>.</li>
+</ol>
+<div class="tscroll"><table><thead><tr><th>Type</th><th>Status</th><th><code>is_customer</code></th></tr></thead><tbody><tr><td>CUSTOMER</td><td>Active</td><td>TRUE</td></tr><tr><td>CUSTOMER</td><td>Inactive</td><td>FALSE</td></tr><tr><td>VENDOR</td><td>Active</td><td>FALSE</td></tr><tr><td>PARTNER</td><td>Active</td><td>FALSE</td></tr><tr><td>PROSPECT</td><td>Active</td><td>FALSE</td></tr><tr><td>UNKNOWN</td><td>Active</td><td>FALSE</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">7.3</span>Single definition principle</h3>
+<p class="prose">The CI script <code>scripts/ci/check_single_definition.py</code> checks that the literal <code>'CUSTOMER'</code> and code <code>100000000</code> appear only in the approved seed and macro.</p>
+<p class="prose">This prevents different models from implementing different customer definitions.</p>
+</div>
+</section>
+<!-- ======================= 8 ======================= -->
+<section class="doc" id="s8">
+  <div class="sec-head"><span class="no">8</span><h2>Tenant assignment</h2></div>
+<div class="sub"><h3><span class="no">8.1</span>Purpose</h3>
+<p class="prose">Tenant assignment determines which customer organization owns each G2 store.</p>
+<p class="prose">The tenant is not necessarily the store's direct CRM account. A CRM account may be a child account of another account. In such cases, the tenant is the top-level account.</p>
+</div>
+<div class="sub"><h3><span class="no">8.2</span>Source dependencies</h3>
+<p class="prose">The process uses:</p>
+<ul class="bul">
+<li>G2 store data from <code>raw_g2</code>.</li>
+<li>CRM store data from <code>int_crm__store</code>.</li>
+<li>CRM account data from <code>int_crm__account</code>.</li>
+<li>Customer classification from the <code>map_customer_type</code> seed and the shared <code>is_customer()</code> macro (the same definition exposed by <code>dim_account</code>).</li>
+</ul>
+</div>
+<div class="sub"><h3><span class="no">8.3</span>Matching process</h3>
+<p class="prose">The approved path is:</p>
+<p class="prose"><b>G2 store → active CRM store → CRM account → top-level CRM account</b></p>
+<ol class="num">
+<li>Read the G2 store record.</li>
+<li>Match it to an active CRM store record using <code>g2_store_id</code>.</li>
+<li>Retrieve the CRM <code>account_id</code> associated with that CRM store.</li>
+<li>Find the account in <code>int_crm__account</code>.</li>
+<li>Follow <code>parent_account_id</code> until the top-level account is reached.</li>
+<li>Use the top-level account ID as <code>tenant_id</code>.</li>
+<li>Determine whether the top-level account qualifies as a customer.</li>
+<li>Set <code>is_customer_store</code> accordingly.</li>
+</ol>
+<h4>Example</h4>
+<pre class="tree">ACC00001 – Top-level customer account
+    |
+    +-- ACC00002 – Regional account
+            |
+            +-- ACC00003 – Store account</pre>
+<p class="prose">A store associated with <code>ACC00003</code> receives:</p>
+<pre class="tree">tenant_id = ACC00001</pre>
+<p class="prose">This is an illustrative hierarchy, not a prescribed CRM account ID format.</p>
+</div>
+<div class="sub"><h3><span class="no">8.4</span><code>int_store__tenant</code></h3>
+<p class="prose">The schema proposal identifies these columns:</p>
+<div class="tscroll"><table><thead><tr><th>Column</th><th>Purpose</th></tr></thead><tbody><tr><td><code>store_id</code></td><td>G2 store identifier</td></tr><tr><td><code>crm_store_id</code></td><td>Matched CRM store identifier</td></tr><tr><td><code>account_id</code></td><td>Associated CRM account</td></tr><tr><td><code>tenant_id</code></td><td>Top-level CRM account ID</td></tr><tr><td><code>hierarchy_depth</code></td><td>Number of account hierarchy levels</td></tr><tr><td><code>is_customer_store</code></td><td>Whether the store belongs to a customer</td></tr><tr><td><code>tenant_reason</code></td><td>Explanation of tenant assignment</td></tr><tr><td><code>_source_updated_at</code></td><td>Source update timestamp</td></tr></tbody></table></div>
+<p class="prose"><code>hierarchy_depth</code> and <code>tenant_reason</code> are proposed schema fields and should be confirmed in <code>specs.md</code>.</p>
+</div>
+<div class="sub"><h3><span class="no">8.5</span>Missing CRM store record</h3>
+<p class="prose">If a G2 store has no active matching CRM store record:</p>
+<ul class="bul">
+<li><code>tenant_id = NULL</code></li>
+<li><code>is_customer_store = false</code></li>
+<li>Generate a DQ37 warning.</li>
+<li>Keep the store available for internal investigation.</li>
+<li>Do not assign it to a customer tenant.</li>
+</ul>
+<p class="prose">A null tenant matches no tenant access policy.</p>
+</div>
+<div class="sub"><h3><span class="no">8.6</span>Non-customer account</h3>
+<p class="prose">A store can have a valid CRM store record but belong to a vendor, partner, or prospect.</p>
+<p class="prose">In that situation:</p>
+<ul class="bul">
+<li>The account relationship may be resolved.</li>
+<li><code>is_customer_store</code> must be false.</li>
+<li>It must not be treated as a customer store.</li>
+<li>No tenant principal should be mapped to that non-customer account.</li>
+</ul>
+</div>
+<div class="sub"><h3><span class="no">8.7</span><code>dim_store</code> enrichment</h3>
+<p class="prose">The core <code>dim_store</code> is created by POC C task C2. POC B task B7 enriches it with <code>tenant_id</code> and <code>is_customer_store</code>, using <code>int_store__tenant</code>.</p>
+</div>
+</section>
+<!-- ======================= 9 ======================= -->
+<section class="doc" id="s9">
+  <div class="sec-head"><span class="no">9</span><h2>CRM work-order fact</h2></div>
+<div class="sub"><h3><span class="no">9.1</span>Purpose</h3>
+<p class="prose">POC B also brings work orders from CRM into the warehouse. Work orders represent operational tasks associated with accounts, stores, and potentially devices.</p>
+</div>
+<div class="sub"><h3><span class="no">9.2</span>Data flow</h3>
+<pre class="tree">work_order.csv
+      |
+      v
+raw_crm.work_order_landing
+      |
+      v
+stg_crm__work_order
+      |
+      v
+int_crm__work_order
+      |
+      v
+fct_work_order</pre>
+</div>
+<div class="sub"><h3><span class="no">9.3</span>Expected fields</h3>
+<div class="tscroll"><table><thead><tr><th>Column</th><th>Purpose</th></tr></thead><tbody><tr><td><code>work_order_id</code></td><td>CRM work-order identifier</td></tr><tr><td><code>tenant_id</code></td><td>Customer tenant</td></tr><tr><td><code>account_id</code></td><td>CRM account</td></tr><tr><td><code>crm_store_id</code></td><td>CRM store</td></tr><tr><td><code>store_id</code></td><td>G2 store</td></tr><tr><td><code>device_id</code></td><td>G2 device</td></tr><tr><td><code>work_type</code></td><td>Work-order type</td></tr><tr><td><code>status</code></td><td>Work-order status</td></tr><tr><td><code>opened_at</code></td><td>Opening timestamp</td></tr><tr><td><code>closed_at</code></td><td>Closing timestamp</td></tr><tr><td><code>opened_date</code></td><td>Date derived from opening timestamp</td></tr><tr><td><code>is_open</code></td><td>Whether the work order remains open</td></tr><tr><td>DQ and lineage fields</td><td>Data quality and source traceability</td></tr></tbody></table></div>
+<p class="prose">The <code>is_open</code> field is a proposed addition in the schema document.</p>
+</div>
+<div class="sub"><h3><span class="no">9.4</span>Physical design</h3>
+<p class="prose">The approved task requires partitioning on <code>opened_date</code>.</p>
+<p class="prose">The schema proposal additionally suggests clustering on <code>tenant_id</code>, <code>store_id</code>, and <code>device_id</code>. Clustering should be confirmed against the final physical-design specification.</p>
+</div>
+<div class="sub"><h3><span class="no">9.5</span>Referential-integrity issue to resolve</h3>
+<p class="prose">The schema proposal describes retaining unknown account, store, or device references and flagging them through DQ47. However, it also describes <code>account_id</code> as non-null and as a foreign key to <code>dim_account</code>.</p>
+<p class="prose">These requirements may conflict when an incoming work order references an unknown account.</p>
+<p class="prose">The implementation must resolve this explicitly before building the final fact:</p>
+<ul class="bul">
+<li>Decide whether unknown references are retained and flagged.</li>
+<li>Decide how the required account relationship is represented.</li>
+<li>Ensure the source account identifier is not silently overwritten.</li>
+<li>Keep the DQ47 behaviour consistent with the approved decision.</li>
+</ul>
+<p class="prose">Do not assume both requirements can be satisfied without a defined handling strategy.</p>
+</div>
+</section>
+<!-- ======================= 10 ======================= -->
+<section class="doc" id="s10">
+  <div class="sec-head"><span class="no">10</span><h2>CRM export simulator (B2)</h2></div>
+<div class="sub"><h3><span class="no">10.1</span>Objective</h3>
+<p class="prose">Create a simulator that generates CRM export folders on an hourly basis. The simulator acts as a stand-in for the client's CRM export system.</p>
+</div>
+<div class="sub"><h3><span class="no">10.2</span>Required behaviour</h3>
+<ol class="num">
+<li>Generate hourly snapshots.</li>
+<li>Produce <code>account.csv</code>.</li>
+<li>Produce <code>store.csv</code>.</li>
+<li>Produce <code>work_order.csv</code>.</li>
+<li>Generate account type changes.</li>
+<li>Generate account status changes.</li>
+<li>Generate at least one unknown customer type code for testing.</li>
+<li>Support the <code>--big-change</code> option.</li>
+<li>Write <code>manifest.json</code> last.</li>
+</ol>
+</div>
+<div class="sub"><h3><span class="no">10.3</span>Big-change simulation</h3>
+<p class="prose">The <code>--big-change</code> option must generate a scenario where more than half of the accounts change. This is required to validate DQ42. The approved acceptance scenario uses a 60% change.</p>
+</div>
+<div class="sub"><h3><span class="no">10.4</span>Completion criteria</h3>
+<p class="prose">B2 is complete when an export folder is generated every hour and the manifest is present and complete.</p>
+</div>
+</section>
+<!-- ======================= 11 ======================= -->
+<section class="doc" id="s11">
+  <div class="sec-head"><span class="no">11</span><h2>CRM loader (B3)</h2></div>
+<div class="sub"><h3><span class="no">11.1</span>Objective</h3>
+<p class="prose">Implement a Python Cloud Run Job named <code>poc-crm-loader</code>. The job loads new, complete CRM export folders into BigQuery.</p>
+<p class="prose">The code belongs in <code>loaders/crm/</code>.</p>
+</div>
+<div class="sub"><h3><span class="no">11.2</span>Loader responsibilities</h3>
+<ul class="bul">
+<li>Discover new export folders.</li>
+<li>Check manifest availability.</li>
+<li>Validate every file.</li>
+<li>Check file size and MD5.</li>
+<li>Apply the change-size guard.</li>
+<li>Load CSV files into their landing tables.</li>
+<li>Avoid duplicate processing.</li>
+<li>Record load status.</li>
+<li>Clean up partially loaded records after failure.</li>
+</ul>
+</div>
+<div class="sub"><h3><span class="no">11.3</span>Execution sequence</h3>
+<h4>Step 1: Discover exports</h4>
+<p class="prose">List <code>crm/export_ts=*/manifest.json</code> in the bucket.</p>
+<h4>Step 2: Check load history</h4>
+<p class="prose">Check <code>raw_crm.load_log</code>. Skip folders whose status is already <code>LOADED</code>.</p>
+<h4>Step 3: Handle held folders</h4>
+<p class="prose">Stop at the first folder marked <code>HELD</code>. Later exports must wait behind it. This prevents the processing watermark from jumping ahead of an export that has not yet been approved. An approved held export is released for loading (see section 12.4).</p>
+<h4>Step 4: Process oldest first</h4>
+<p class="prose">Process new export folders in chronological order.</p>
+<h4>Step 5: Validate manifest</h4>
+<p class="prose">For every export:</p>
+<ul class="bul">
+<li>Confirm all files exist.</li>
+<li>Confirm file sizes match.</li>
+<li>Confirm MD5 checksums match.</li>
+</ul>
+<p class="prose">Reuse the validation approach from <code>upload-file-validator-data-lake-poc</code>.</p>
+<h4>Step 6: Run the change-size guard</h4>
+<p class="prose">Apply DQ42 before loading the folder. If the guard holds the folder, load nothing, record the folder as <code>HELD</code> in <code>load_log</code>, and stop processing later folders.</p>
+<h4>Step 7: Load CSV files</h4>
+<div class="tscroll"><table><thead><tr><th>File</th><th>Landing table</th></tr></thead><tbody><tr><td><code>account.csv</code></td><td><code>raw_crm.account_landing</code></td></tr><tr><td><code>store.csv</code></td><td><code>raw_crm.store_landing</code></td></tr><tr><td><code>work_order.csv</code></td><td><code>raw_crm.work_order_landing</code></td></tr></tbody></table></div>
+<p class="prose">The approved loading configuration is <code>WRITE_APPEND</code>, explicit schema, and <code>skip_leading_rows=1</code>.</p>
+<h4>Step 8: Handle partial failure</h4>
+<p class="prose">If any file fails:</p>
+<ol class="num">
+<li>Delete the rows associated with that export timestamp from the landing tables.</li>
+<li>Mark the folder <code>FAILED</code>.</li>
+<li>Do not treat the export as successfully loaded.</li>
+<li>Allow the next loader execution to retry it.</li>
+</ol>
+<h4>Step 9: Write load log</h4>
+<p class="prose">Record the folder, files, row counts, status, and processing time.</p>
+</div>
+<div class="sub"><h3><span class="no">11.4</span>Idempotency</h3>
+<p class="prose">The loader must be safe to run repeatedly.</p>
+<ul class="bul">
+<li>First run: export is loaded.</li>
+<li>Second run: the same export is detected as already loaded.</li>
+<li>Second run: no duplicate rows are loaded.</li>
+</ul>
+<p class="prose">This is verified by AT-20.</p>
+</div>
+<div class="sub"><h3><span class="no">11.5</span>Shared raw dataset behaviour</h3>
+<p class="prose">The approved plan specifies:</p>
+<ul class="bul">
+<li>The <code>dev</code> micro-batch starts the CRM loader on every run.</li>
+<li>The <code>int</code> micro-batch does not run it.</li>
+<li>The <code>int</code> configuration uses <code>run_crm_loader = false</code>.</li>
+</ul>
+<p class="prose">The reason is that <code>raw_crm</code> is shared. The CRM export should not be independently loaded again by the integration environment.</p>
+</div>
+</section>
+<!-- ======================= 12 ======================= -->
+<section class="doc" id="s12">
+  <div class="sec-head"><span class="no">12</span><h2>Change-size guard (B5)</h2></div>
+<div class="sub"><h3><span class="no">12.1</span>Purpose</h3>
+<p class="prose">The change-size guard protects the warehouse from unexpectedly large CRM changes.</p>
+<p class="prose">A large change could indicate an accidental bulk update, an incorrect export, a source-system problem, a simulator defect, or an unexpected change in customer classification or account data.</p>
+<p class="prose">Instead of automatically loading a suspicious export, the loader holds it for review.</p>
+</div>
+<div class="sub"><h3><span class="no">12.2</span>Change calculation</h3>
+<p class="prose">The guard compares the current <code>account.csv</code> with the previous successfully loaded export.</p>
+<p class="prose">Changed rows include:</p>
+<ol class="num">
+<li>Rows whose <code>(account_id, updated_at)</code> pair is new.</li>
+<li>Accounts that disappeared from the previous export. Under the source-data rule that accounts are never deleted (they become <code>Inactive</code>), a disappearing account is itself anomalous and is counted as a change.</li>
+</ol>
+<div class="note info"><b>Formula</b><p class="mono">Change ratio = Changed rows ÷ Rows in previous export</p></div>
+</div>
+<div class="sub"><h3><span class="no">12.3</span>Threshold</h3>
+<p class="prose"><b>Approved threshold: greater than 50%.</b></p>
+<p class="prose">If the ratio is greater than 0.5:</p>
+<ul class="bul">
+<li>Mark the export <code>HELD</code>.</li>
+<li>Load nothing from that export.</li>
+<li>Log a structured error.</li>
+<li>Trigger the alert policy.</li>
+</ul>
+<p class="prose">The structured log event is:</p>
+<script type="text/plain" class="code" data-lang="json" data-tag="plan" data-title="structured log event (change-size guard)">{
+  "event": "crm_guard_tripped"
+}</script>
+<p class="prose">The E7 alert policy emails the team.</p>
+</div>
+<div class="sub"><h3><span class="no">12.4</span>Approval process</h3>
+<p class="prose">A person must review the export before approving it. Approval releases the held export so the loader can validate and load it on its next run (after which it is recorded as <code>LOADED</code>), and later exports can then proceed in order.</p>
+<script type="text/plain" class="code" data-lang="bash" data-tag="sug" data-title="approve a held export">poc-crm-loader --approve export_ts=<timestamp></script>
+<p class="prose">The actual command-line implementation must follow the loader's configured argument interface.</p>
+</div>
+<div class="sub"><h3><span class="no">12.5</span>Required unit tests</h3>
+<div class="tscroll"><table><thead><tr><th>Scenario</th><th>Expected result</th></tr></thead><tbody><tr><td>0% change</td><td>Load</td></tr><tr><td>49% change</td><td>Load</td></tr><tr><td>51% change</td><td>Hold</td></tr><tr><td>First-ever export</td><td>Load; no previous export exists for comparison</td></tr><tr><td>60% simulated change</td><td>Hold and alert</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">12.6</span>Processing order protection</h3>
+<p class="prose">If an export is held, later exports must wait. This is important because loading later exports first could cause the warehouse watermark to move ahead while an earlier export remains unresolved.</p>
+</div>
+</section>
+<!-- ======================= 13 ======================= -->
+<section class="doc" id="s13">
+  <div class="sec-head"><span class="no">13</span><h2>Data quality and error handling</h2></div>
+<div class="sub"><h3><span class="no">13.1</span>Approved POC B checks</h3>
+<div class="tscroll"><table><thead><tr><th>DQ ID</th><th>Condition</th><th>Severity</th><th>Expected behaviour</th><th>Location</th></tr></thead><tbody><tr><td>DQ36</td><td>Unknown CRM account type</td><td>Warning</td><td>Set enum to <code>UNKNOWN</code>, <code>is_customer=false</code></td><td><code>dim_account</code></td></tr><tr><td>DQ37</td><td>G2 store has no active CRM store record</td><td>Warning</td><td>Set tenant to NULL and customer-store flag to false</td><td><code>int_store__tenant</code></td></tr><tr><td>DQ40</td><td>No new CRM export loaded in 75 minutes</td><td>Freshness error</td><td>Generate alert</td><td>Freshness check</td></tr><tr><td>DQ41</td><td>Personal data appears in warehouse</td><td>Error</td><td>Fail build</td><td>Singular test and daily scan</td></tr><tr><td>DQ42</td><td>More than half of CRM accounts change in one export</td><td>Error</td><td>Hold export and alert</td><td><code>poc-crm-loader</code></td></tr></tbody></table></div>
+<p class="prose">DQ45–DQ47 appear as additional proposals in the schema document. They should not be treated as approved requirements unless formally confirmed. (The approved plan defines DQ33–DQ43.)</p>
+</div>
+<div class="sub"><h3><span class="no">13.2</span>DQ36 – Unknown customer type</h3>
+<p class="prose">When an account has an unknown customer type code:</p>
+<ul class="bul">
+<li>Map it to <code>UNKNOWN</code>.</li>
+<li>Set <code>is_customer = false</code>.</li>
+<li>Record the warning.</li>
+<li>Do not grant it customer status.</li>
+</ul>
+</div>
+<div class="sub"><h3><span class="no">13.3</span>DQ37 – Store without active CRM mapping</h3>
+<p class="prose">When a G2 store has no active CRM store record:</p>
+<ul class="bul">
+<li>Set <code>tenant_id = NULL</code>.</li>
+<li>Set <code>is_customer_store = false</code>.</li>
+<li>Keep it internal-only.</li>
+<li>Record a warning.</li>
+</ul>
+</div>
+<div class="sub"><h3><span class="no">13.4</span>DQ40 – CRM export freshness</h3>
+<p class="prose">No new CRM export should be loaded for more than 75 minutes without detection. If the freshness requirement is violated, the freshness check must generate an alert.</p>
+</div>
+<div class="sub"><h3><span class="no">13.5</span>DQ41 – Personal-data protection</h3>
+<p class="prose">The warehouse must not contain original personal contact data.</p>
+<p class="prose">The check must detect:</p>
+<ul class="bul">
+<li>Deny-listed personal-data columns.</li>
+<li>Email-like values.</li>
+</ul>
+<p class="prose">It must fail the build when a violation is detected.</p>
+</div>
+<div class="sub"><h3><span class="no">13.6</span>DQ42 – Large CRM change</h3>
+<p class="prose">A change ratio above 50% must hold the export and trigger an alert.</p>
+</div>
+<div class="sub"><h3><span class="no">13.7</span>Failure handling principles</h3>
+<ol class="num">
+<li>Do not silently discard invalid records.</li>
+<li>Do not mark a partially loaded export as successful.</li>
+<li>Do not advance past a held export.</li>
+<li>Record failure details.</li>
+<li>Make retries safe.</li>
+<li>Preserve enough lineage to identify the source export.</li>
+<li>Keep customer classification conservative: unknown does not mean customer.</li>
+</ol>
+</div>
+<div class="sub"><h3><span class="no">13.8</span>dbt test failures</h3>
+<p class="prose">The approved plan uses <code>dq_{env}</code> for dbt <code>store_failures</code>. Failing rows should be stored so that the team can investigate the records responsible for a failed test.</p>
+</div>
+</section>
+<!-- ======================= 14 ======================= -->
+<section class="doc" id="s14">
+  <div class="sec-head"><span class="no">14</span><h2>Security and personal data</h2></div>
+<div class="sub"><h3><span class="no">14.1</span>Personal-data handling</h3>
+<p class="prose">CRM contains personal contact information. The approved design requires personal data to be tokenized before it moves beyond staging.</p>
+<div class="tscroll"><table><thead><tr><th>Layer</th><th>Contact name/email</th></tr></thead><tbody><tr><td>Raw landing</td><td>Original source values</td></tr><tr><td>Staging</td><td>Replaced by <code>primary_contact_token</code>; raw columns dropped</td></tr><tr><td>Intermediate</td><td>Token only</td></tr><tr><td>Warehouse</td><td>Token only</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">14.2</span>Tokenization</h3>
+<p class="prose">The staging model replaces <code>primary_contact_name</code> and <code>primary_contact_email</code> with <code>primary_contact_token</code>.</p>
+<p class="prose">The actual tokenization algorithm, key management implementation, and key table structure are not defined in the approved POC B task notes. They must follow the project's shared tokenization implementation and security design.</p>
+<p class="prose">Do not invent a hashing or encryption algorithm as part of this document.</p>
+</div>
+<div class="sub"><h3><span class="no">14.3</span>Customer and tenant security</h3>
+<p class="prose">POC B prepares the information needed by POC D. It does not implement the final row access policies itself.</p>
+<p class="prose">POC B provides:</p>
+<ul class="bul">
+<li>Customer classification in <code>dim_account</code>.</li>
+<li>Tenant assignment in <code>dim_store</code>.</li>
+<li>Customer-store classification.</li>
+<li>Account relationships.</li>
+</ul>
+<p class="prose">POC D uses these outputs to determine which tenant can access which records.</p>
+</div>
+<div class="sub"><h3><span class="no">14.4</span>Vendor and partner isolation</h3>
+<p class="prose">Vendor and partner accounts must not be classified as customers.</p>
+<p class="prose">The approved AT-19 scenario plants a vendor account linked to two stores. Both stores must have:</p>
+<pre class="tree">is_customer_store = false</pre>
+<p class="prose">The POC D security suite must then prove that no customer tenant can see those stores.</p>
+</div>
+</section>
+<!-- ======================= 15 ======================= -->
+<section class="doc" id="s15">
+  <div class="sec-head"><span class="no">15</span><h2>Implementation tasks and ownership</h2></div>
+<div class="sub"><h3><span class="no">15.1</span>Approved task breakdown</h3>
+<div class="tscroll"><table><thead><tr><th>ID</th><th>Task</th><th>Owner</th><th>Day</th><th>Dependencies</th><th>Completion condition</th></tr></thead><tbody><tr class="ownable" data-own="d5"><td>B1</td><td>CRM export specification and type codes</td><td>Dev 5</td><td>1–2</td><td>None</td><td>Included in <code>specs.md</code></td></tr><tr class="ownable" data-own="d3"><td>B2</td><td>CRM export simulator</td><td>Dev 3</td><td>3–4</td><td>0.6, B1</td><td>Hourly export folders generated</td></tr><tr class="ownable" data-own="d3"><td>B3</td><td>CRM loader</td><td>Dev 3</td><td>4–5</td><td>B2</td><td>Second run loads nothing</td></tr><tr class="ownable" data-own="d3"><td>B4</td><td>Staging and intermediate watermark models</td><td>Dev 3</td><td>5–6</td><td>B3, 0.4</td><td>AT-20 passes</td></tr><tr class="ownable" data-own="d3"><td>B5</td><td>Change-size guard and approval command</td><td>Dev 3</td><td>6–7</td><td>B3</td><td>AT-21 passes</td></tr><tr class="ownable" data-own="d5"><td>B6</td><td>Customer type seed, macro, and <code>dim_account</code></td><td>Dev 5</td><td>3–4</td><td>B1; B4 can be stubbed</td><td>Required fields and tests pass</td></tr><tr class="ownable" data-own="d5"><td>B7</td><td>Tenant assignment and store enrichment</td><td>Dev 5</td><td>4–5</td><td>B6, C2</td><td>Every store has a tenant or appears in DQ37</td></tr><tr class="ownable" data-own="d5"><td>B8</td><td>AT-19 checks</td><td>Dev 5</td><td>5–6</td><td>B6, B7</td><td>AT-19 passes</td></tr><tr class="ownable" data-own="d3"><td>B9</td><td><code>fct_work_order</code></td><td>Dev 3</td><td>8</td><td>B4</td><td>Built and tested; partitioned on <code>opened_date</code></td></tr><tr class="ownable" data-own="d5"><td>B10</td><td>Type-2 store history snapshot</td><td>Dev 5</td><td>Stretch</td><td>G7 passed</td><td>Snapshot shows store moving account</td></tr></tbody></table></div>
+</div>
+<div class="sub"><h3><span class="no">15.2</span>Developer responsibilities</h3>
+<div class="panel ownable" data-own="d3"><h4>Dev 3</h4>
+<p class="prose">Responsible for:</p>
+<ul class="bul">
+<li>CRM export writer.</li>
+<li>CRM loader.</li>
+<li>Manifest and file validation.</li>
+<li>Load tracking.</li>
+<li>Change-size guard.</li>
+<li>CRM staging and intermediate models.</li>
+<li>Work-order fact.</li>
+</ul>
+</div>
+<div class="panel ownable" data-own="d5"><h4>Dev 5</h4>
+<p class="prose">Responsible for:</p>
+<ul class="bul">
+<li>CRM export specification.</li>
+<li>Customer type mapping.</li>
+<li><code>is_customer()</code> macro.</li>
+<li><code>dim_account</code>.</li>
+<li>Tenant assignment.</li>
+<li>Store enrichment.</li>
+<li>AT-19.</li>
+</ul>
+</div>
+</div>
+<div class="sub"><h3><span class="no">15.3</span>Work coordination</h3>
+<p class="prose">The main coordination point is B7.</p>
+<p class="prose">Dev 5 needs the following before tenant enrichment can be completed:</p>
+<ul class="bul">
+<li>CRM account classification from B6.</li>
+<li>CRM store and account intermediate models.</li>
+<li>Core <code>dim_store</code> from POC C C2.</li>
+<li>G2 store identifiers from <code>raw_g2</code>.</li>
+</ul>
+<p class="prose">The work can be developed in parallel, but the final model cannot be completed until these dependencies are available.</p>
+</div>
+<div class="sub"><h3><span class="no">15.4</span>Detailed task breakdown (B1–B10)</h3>
+<p class="prose">Each block below expands one row of the table in 15.1. Owners, days, dependencies and completion conditions are the approved values; sub-steps are drawn from the sections referenced in each block.</p>
+<div class="panel at ownable" data-own="d5"><div class="hd"><h4>B1 – CRM export specification and type codes</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 5 / day 1–2</td></tr><tr><td>Depends on</td><td>None (part of task 0.7)</td></tr><tr><td>Blocks</td><td>B2, B6</td></tr><tr><td>Detail sections</td><td>5.2, 5.3, 7.1</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Define the columns, types and meaning of <code>account.csv</code>, <code>store.csv</code> and <code>work_order.csv</code>.</li>
+<li>Record the source-data rules: accounts are never deleted (they become <code>Inactive</code>), stores carry <code>account_id</code>, <code>g2_store_id</code> is required.</li>
+<li>Define the four known customer type codes (<code>100000000</code>–<code>100000003</code>) and the <code>UNKNOWN</code> fallback.</li>
+<li>Define <code>export_ts</code> and <code>updated_at</code> behaviour.</li>
+<li>Define the folder layout <code>crm/export_ts=&lt;timestamp&gt;/</code> and the <code>manifest.json</code> structure (file name, size, MD5; written last).</li>
+<li>Confirm or reject the proposed ID patterns and optional fields listed in section 21.</li>
+</ol>
+<p class="small"><b>Output:</b> CRM export specification in <code>specs.md</code>.</p>
+<div class="expect"><b>Done when</b><span>the specification is in <code>specs.md</code>.</span></div>
+</div>
+<div class="panel at ownable" data-own="d3"><div class="hd"><h4>B2 – CRM export simulator</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 3 / day 3–4</td></tr><tr><td>Depends on</td><td>0.6, B1</td></tr><tr><td>Blocks</td><td>B3</td></tr><tr><td>Detail sections</td><td>10, 5.2, 5.3</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Generate an hourly snapshot folder with <code>account.csv</code>, <code>store.csv</code> and <code>work_order.csv</code>.</li>
+<li>Generate account type changes and status changes between snapshots.</li>
+<li>Plant at least one unknown customer type code.</li>
+<li>Implement <code>--big-change</code> so that 60% of accounts change (used by DQ42 and AT-21).</li>
+<li>Compute file sizes and MD5 checksums and write <code>manifest.json</code> last.</li>
+</ol>
+<p class="small"><b>Output:</b> CRM export writer in the simulator; export folders in GCS.</p>
+<div class="expect"><b>Done when</b><span>an export folder appears every hour with a complete manifest.</span></div>
+</div>
+<div class="panel at ownable" data-own="d3"><div class="hd"><h4>B3 – CRM loader (<code>poc-crm-loader</code>)</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 3 / day 4–5</td></tr><tr><td>Depends on</td><td>B2</td></tr><tr><td>Blocks</td><td>B4, B5</td></tr><tr><td>Detail sections</td><td>11, 6.1</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Create the Python Cloud Run job in <code>loaders/crm/</code>.</li>
+<li>List <code>crm/export_ts=*/manifest.json</code>.</li>
+<li>Skip folders already <code>LOADED</code> in <code>raw_crm.load_log</code>; stop at the first <code>HELD</code> folder.</li>
+<li>Process new folders oldest first.</li>
+<li>Validate every file in the manifest (present, size, MD5), reusing the check from <code>upload-file-validator-data-lake-poc</code>.</li>
+<li>Load each CSV into its landing table with <code>WRITE_APPEND</code>, an explicit schema and <code>skip_leading_rows=1</code>.</li>
+<li>On any file failure, delete that export's rows from the landing tables, mark the folder <code>FAILED</code>, and leave it for retry.</li>
+<li>Write the <code>load_log</code> row (folder, files, row counts, status, processing time).</li>
+<li>Configure the <code>dev</code> micro-batch to start the loader and <code>int</code> to skip it (<code>run_crm_loader = false</code>).</li>
+</ol>
+<p class="small"><b>Output:</b> <code>poc-crm-loader</code> job, <code>raw_crm</code> landing tables, <code>raw_crm.load_log</code>.</p>
+<div class="expect"><b>Done when</b><span>running the loader twice loads nothing the second time.</span></div>
+</div>
+<div class="panel at ownable" data-own="d3"><div class="hd"><h4>B4 – Staging and intermediate watermark models</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 3 / day 5–6</td></tr><tr><td>Depends on</td><td>B3, 0.4</td></tr><tr><td>Blocks</td><td>B9 (and B6 final wiring)</td></tr><tr><td>Detail sections</td><td>6.2, 6.3, 14.1, 16.2</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Create <code>stg_crm__account</code>, <code>stg_crm__store</code>, <code>stg_crm__work_order</code> with typing.</li>
+<li>In <code>stg_crm__account</code>, replace contact name and email with <code>primary_contact_token</code> and drop the originals.</li>
+<li>Create <code>int_crm__account</code>, <code>int_crm__store</code>, <code>int_crm__work_order</code> as incremental <code>merge</code> models on their unique keys with an <code>updated_at</code> watermark.</li>
+<li>Keep the latest version per key using <code>row_number()</code> over <code>export_ts desc, updated_at desc</code>.</li>
+<li>Test equal-timestamp and late-arriving records against the watermark.</li>
+<li>Verify the re-run produces no duplicates.</li>
+</ol>
+<p class="small"><b>Output:</b> three <code>stg_crm__*</code> and three <code>int_crm__*</code> models.</p>
+<div class="expect"><b>Done when</b><span>AT-20 passes (re-run loads nothing; five account changes change exactly five rows).</span></div>
+</div>
+<div class="panel at ownable" data-own="d3"><div class="hd"><h4>B5 – Change-size guard and approval command</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 3 / day 6–7</td></tr><tr><td>Depends on</td><td>B3</td></tr><tr><td>Blocks</td><td>AT-21</td></tr><tr><td>Detail sections</td><td>12, 13.6, 16.3</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Compare the current <code>account.csv</code> with the previous successfully loaded export: new <code>(account_id, updated_at)</code> pairs plus disappeared accounts, divided by rows in the previous export.</li>
+<li>Hold the export when the ratio is greater than 0.5: status <code>HELD</code>, nothing loaded, later exports wait.</li>
+<li>Log the structured event <code>crm_guard_tripped</code> and connect it to the E7 alert policy (email within five minutes).</li>
+<li>Add the approve command (<code>poc-crm-loader --approve export_ts=&lt;timestamp&gt;</code>) that releases a held export.</li>
+<li>Unit tests: 0% load, 49% load, 51% hold, first-ever export load, 60% hold and alert.</li>
+</ol>
+<p class="small"><b>Output:</b> guard logic and approval command in the loader.</p>
+<div class="expect"><b>Done when</b><span>AT-21 passes.</span></div>
+</div>
+<div class="panel at ownable" data-own="d5"><div class="hd"><h4>B6 – Customer type seed, macro and <code>dim_account</code></h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 5 / day 3–4</td></tr><tr><td>Depends on</td><td>B1 (B4 may be stubbed)</td></tr><tr><td>Blocks</td><td>B7, B8</td></tr><tr><td>Detail sections</td><td>6.4, 7, 13.2</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Create <code>seeds/map_customer_type.csv</code> with the four type codes.</li>
+<li>Create the <code>is_customer()</code> macro (type <code>CUSTOMER</code> and status <code>Active</code>).</li>
+<li>Build <code>dim_account</code> with <code>customer_type_code</code>, <code>customer_type_enum</code>, <code>customer_type_name</code>, <code>is_customer</code>, <code>tenant_id</code> (top-level account ID), <code>primary_contact_token</code> and lineage columns.</li>
+<li>Map unknown codes to <code>UNKNOWN</code> with <code>is_customer = false</code> and raise DQ36.</li>
+<li>Add <code>scripts/ci/check_single_definition.py</code> so <code>'CUSTOMER'</code> and <code>100000000</code> appear only in the seed and macro.</li>
+<li>Add dbt tests for the required fields and the customer rule.</li>
+</ol>
+<p class="small"><b>Output:</b> seed, macro, <code>dim_account</code>, CI script.</p>
+<div class="expect"><b>Done when</b><span>tests pass and <code>dim_account</code> has <code>customer_type_enum</code>, <code>customer_type_name</code>, <code>is_customer</code> and <code>tenant_id</code>.</span></div>
+</div>
+<div class="panel at ownable" data-own="d5"><div class="hd"><h4>B7 – Tenant assignment and store enrichment</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 5 / day 4–5</td></tr><tr><td>Depends on</td><td>B6, C2</td></tr><tr><td>Blocks</td><td>B8, tenant fields on B9</td></tr><tr><td>Detail sections</td><td>8, 13.3</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Match G2 stores from <code>raw_g2</code> to active CRM stores in <code>int_crm__store</code> on <code>g2_store_id</code>.</li>
+<li>Resolve the CRM <code>account_id</code> in <code>int_crm__account</code> and follow <code>parent_account_id</code> to the top-level account.</li>
+<li>Set <code>tenant_id</code> to the top-level account ID and <code>is_customer_store</code> using the shared customer definition.</li>
+<li>For stores with no active CRM store record, set <code>tenant_id = NULL</code>, <code>is_customer_store = false</code> and raise DQ37.</li>
+<li>Publish <code>int_store__tenant</code>; confirm the proposed <code>hierarchy_depth</code> and <code>tenant_reason</code> columns.</li>
+<li>Add <code>tenant_id</code> and <code>is_customer_store</code> to the POC C <code>dim_store</code>.</li>
+<li>Agree handling of missing parents, hierarchy loops and multiple active matches (proposed DQ45, DQ46).</li>
+</ol>
+<p class="small"><b>Output:</b> <code>int_store__tenant</code>; enriched <code>dim_store</code>.</p>
+<div class="expect"><b>Done when</b><span>every store has a tenant or is listed by DQ37.</span></div>
+</div>
+<div class="panel at ownable" data-own="d5"><div class="hd"><h4>B8 – AT-19 checks</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 5 / day 5–6</td></tr><tr><td>Depends on</td><td>B6, B7</td></tr><tr><td>Blocks</td><td>Phase 2 sign-off; POC D isolation proof</td></tr><tr><td>Detail sections</td><td>14.4, 16.1</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Test that every account with <code>is_customer = true</code> has type <code>CUSTOMER</code> and status <code>Active</code>.</li>
+<li>Test that every tenant in <code>map_tenant_access</code> is a customer account.</li>
+<li>Run <code>scripts/ci/check_single_definition.py</code>.</li>
+<li>Plant a vendor account linked to two stores and confirm both have <code>is_customer_store = false</code>.</li>
+<li>Run the POC D security suite, when available, to prove no tenant can see those stores.</li>
+</ol>
+<p class="small"><b>Output:</b> AT-19 tests.</p>
+<div class="expect"><b>Done when</b><span>AT-19 passes.</span></div>
+</div>
+<div class="panel at ownable" data-own="d3"><div class="hd"><h4>B9 – <code>fct_work_order</code></h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 3 / day 8</td></tr><tr><td>Depends on</td><td>B4 (tenant and store fields also need B7)</td></tr><tr><td>Blocks</td><td>POC C task C10, POC F benchmarks</td></tr><tr><td>Detail sections</td><td>9</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Read <code>int_crm__work_order</code>.</li>
+<li>Resolve account, CRM store, G2 store and device references; take <code>tenant_id</code> and <code>store_id</code> from <code>int_store__tenant</code>.</li>
+<li>Derive <code>opened_date</code> and partition the table on it (clustering and <code>is_open</code> pending confirmation).</li>
+<li>Decide how unknown account, store or device references are kept and flagged (section 9.5, proposed DQ47) before finalizing constraints.</li>
+<li>Add tests and lineage columns.</li>
+</ol>
+<p class="small"><b>Output:</b> <code>fct_work_order</code>.</p>
+<div class="expect"><b>Done when</b><span>built and tested, partitioned on <code>opened_date</code>.</span></div>
+</div>
+<div class="panel at ownable" data-own="d5"><div class="hd"><h4>B10 – Type-2 store history snapshot (stretch)</h4></div>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Owner / days</td><td>Dev 5 / stretch (no scheduled day)</td></tr><tr><td>Depends on</td><td>G7 passed</td></tr><tr><td>Blocks</td><td>Nothing</td></tr><tr><td>Detail sections</td><td>2.2</td></tr></tbody></table></div>
+<p class="prose"><b>Sub-steps</b></p>
+<ol class="num">
+<li>Add a dbt snapshot on <code>dim_store</code> tracking <code>tenant_id</code> and account changes (type 2 history).</li>
+<li>Simulate a store moving to another account and run the snapshot.</li>
+</ol>
+<p class="small"><b>Output:</b> <code>dim_store</code> history snapshot.</p>
+<div class="expect"><b>Done when</b><span>the snapshot shows a store moving account. Optional; do only if time remains after G7.</span></div>
+</div>
+</div>
+  <div class="sub"><h3><span class="no">15.5</span>Timeline (days 1–8)</h3>
+    <p class="prose">Bars are coloured by owner. B10 is a stretch task after Gate G7 and is not drawn. Use the Highlight buttons at the top to show one developer's tasks.</p>
+    <div class="tscroll"><div class="gantt" id="gantt"></div></div>
+  </div>
+</section>
+<!-- ======================= 16 ======================= -->
+<section class="doc" id="s16">
+  <div class="sec-head"><span class="no">16</span><h2>Acceptance tests</h2></div>
+<p class="prose">POC B has three principal acceptance tests.</p>
+<div class="sub"><h3><span class="no">16.1</span>AT-19 – One definition of customer</h3>
+<p class="prose"><b>Objective:</b> Prove that the CRM customer definition is applied consistently and that non-customer accounts cannot become customer tenants.</p>
+<h4>Test 1 – Customer classification</h4>
+<p class="prose">Every account where <code>is_customer = true</code> must have:</p>
+<ul class="bul">
+<li><code>customer_type_enum = 'CUSTOMER'</code></li>
+<li><code>status = 'Active'</code></li>
+</ul>
+<h4>Test 2 – Tenant mapping</h4>
+<p class="prose">Every tenant in <code>map_tenant_access</code> must be a customer account.</p>
+<h4>Test 3 – Single definition CI check</h4>
+<p class="prose">Run <code>scripts/ci/check_single_definition.py</code>.</p>
+<p class="prose">The script verifies that:</p>
+<ul class="bul">
+<li><code>'CUSTOMER'</code> appears only in the approved seed and macro.</li>
+<li>Code <code>100000000</code> appears only in the approved seed and macro.</li>
+</ul>
+<h4>Test 4 – Vendor isolation</h4>
+<p class="prose">Plant a vendor account linked to two stores.</p>
+<p class="prose">Expected:</p>
+<ul class="bul">
+<li>Both stores have <code>is_customer_store = false</code>.</li>
+<li>No tenant can see either store.</li>
+<li>POC D security tests prove the isolation.</li>
+</ul>
+<p class="prose"><b>Acceptance condition: AT-19 passes.</b></p>
+</div>
+<div class="sub"><h3><span class="no">16.2</span>AT-20 – CRM watermark merge</h3>
+<p class="prose"><b>Objective:</b> Prove that CRM exports are loaded incrementally and repeated execution does not duplicate data.</p>
+<h4>Test 1 – Re-run the same export</h4>
+<ol class="num">
+<li>Generate a CRM export.</li>
+<li>Run the loader.</li>
+<li>Record the loaded state.</li>
+<li>Run the loader again.</li>
+</ol>
+<p class="prose">Expected:</p>
+<ul class="bul">
+<li>First run loads the export.</li>
+<li>Second run loads nothing.</li>
+<li>No duplicate rows are created.</li>
+</ul>
+<h4>Test 2 – Five account changes</h4>
+<ol class="num">
+<li>Record a fingerprint of <code>int_crm__account</code>.</li>
+<li>Generate a subsequent export where five accounts change.</li>
+<li>Run the loader and transformation models.</li>
+<li>Compare the resulting account data.</li>
+</ol>
+<p class="prose">Expected: exactly five account rows change in <code>int_crm__account</code>.</p>
+<p class="prose"><b>Acceptance condition: AT-20 passes.</b></p>
+</div>
+<div class="sub"><h3><span class="no">16.3</span>AT-21 – Change-size guard</h3>
+<p class="prose"><b>Objective:</b> Prove that a suspiciously large CRM change is held until approved.</p>
+<h4>Test sequence</h4>
+<ol class="num">
+<li>Run the simulator with:</li>
+</ol>
+<script type="text/plain" class="code" data-lang="bash" data-tag="plan" data-title="run the big-change scenario">simulator crm-export --big-change</script>
+<ol class="num">
+<li>The simulator changes 60% of accounts.</li>
+<li>The loader discovers the export.</li>
+<li>The change-size guard calculates the change ratio.</li>
+<li>The loader marks the export <code>HELD</code>.</li>
+<li>No records from that export are loaded.</li>
+<li>A structured error is logged.</li>
+<li>The alert email is generated within five minutes.</li>
+<li>A human reviews the export.</li>
+<li>Run the loader with the approval argument.</li>
+</ol>
+<p class="prose">Expected:</p>
+<ul class="bul">
+<li>The export is held before loading.</li>
+<li>No data from the held export is loaded.</li>
+<li>The alert is sent within five minutes.</li>
+<li>The export loads after approval.</li>
+</ul>
+<p class="prose"><b>Acceptance condition: AT-21 passes.</b></p>
+</div>
+</section>
+<!-- ======================= 17 ======================= -->
+<section class="doc" id="s17">
+  <div class="sec-head"><span class="no">17</span><h2>Execution runbook</h2></div>
+<p class="prose">This section describes the practical sequence for implementing and validating POC B. The phases follow the dependency order and the approved day schedule in section 15.1.</p>
+<div class="panel overall"><b>Progress</b><div class="pbar" aria-hidden="true"><i id="allBar"></i></div><span class="prog-mini" id="allTxt"></span><button class="btn" id="resetBtn">Clear all ticks</button></div>
+<article class="phase ownable" data-own="d3 d5" id="p1"><header><div class="t"><span class="pno">Phase 1</span><h3>Verify prerequisites</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Before coding:</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p1-1"><div class="sb"><label for="rb-p1-1">Confirm that tasks 0.4, 0.6 and 0.7 are complete.</label></div></li>
+<li><input type="checkbox" id="rb-p1-2"><div class="sb"><label for="rb-p1-2">Confirm the CRM source specification.</label></div></li>
+<li><input type="checkbox" id="rb-p1-3"><div class="sb"><label for="rb-p1-3">Confirm the BigQuery project and dataset configuration.</label></div></li>
+<li><input type="checkbox" id="rb-p1-4"><div class="sb"><label for="rb-p1-4">Confirm the GCS bucket and CRM export folder location.</label></div></li>
+<li><input type="checkbox" id="rb-p1-5"><div class="sb"><label for="rb-p1-5">Confirm the dbt project and target configuration.</label></div></li>
+<li><input type="checkbox" id="rb-p1-6"><div class="sb"><label for="rb-p1-6">Confirm that <code>raw_g2</code> is available.</label></div></li>
+<li><input type="checkbox" id="rb-p1-7"><div class="sb"><label for="rb-p1-7">Coordinate the POC C C2 <code>dim_store</code> dependency.</label></div></li>
+<li><input type="checkbox" id="rb-p1-8"><div class="sb"><label for="rb-p1-8">Review the existing tokenization approach.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>The team understands the required inputs, target tables, and environment dependencies.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d5" id="p2"><header><div class="t"><span class="pno">Phase 2</span><h3>Define CRM source schemas</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B1.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p2-1"><div class="sb"><label for="rb-p2-1">Define <code>account.csv</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p2-2"><div class="sb"><label for="rb-p2-2">Define <code>store.csv</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p2-3"><div class="sb"><label for="rb-p2-3">Define <code>work_order.csv</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p2-4"><div class="sb"><label for="rb-p2-4">Define the four known customer type codes.</label></div></li>
+<li><input type="checkbox" id="rb-p2-5"><div class="sb"><label for="rb-p2-5">Define export timestamp and update timestamp behaviour.</label></div></li>
+<li><input type="checkbox" id="rb-p2-6"><div class="sb"><label for="rb-p2-6">Define manifest structure.</label></div></li>
+<li><input type="checkbox" id="rb-p2-7"><div class="sb"><label for="rb-p2-7">Add the specifications to <code>specs.md</code>.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>The simulator and loader can use one agreed source contract.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d3" id="p3"><header><div class="t"><span class="pno">Phase 3</span><h3>Build the simulator</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B2.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p3-1"><div class="sb"><label for="rb-p3-1">Implement the hourly CRM export writer.</label></div></li>
+<li><input type="checkbox" id="rb-p3-2"><div class="sb"><label for="rb-p3-2">Generate account data.</label></div></li>
+<li><input type="checkbox" id="rb-p3-3"><div class="sb"><label for="rb-p3-3">Generate CRM store data.</label></div></li>
+<li><input type="checkbox" id="rb-p3-4"><div class="sb"><label for="rb-p3-4">Generate work orders.</label></div></li>
+<li><input type="checkbox" id="rb-p3-5"><div class="sb"><label for="rb-p3-5">Generate account status changes.</label></div></li>
+<li><input type="checkbox" id="rb-p3-6"><div class="sb"><label for="rb-p3-6">Generate account type changes.</label></div></li>
+<li><input type="checkbox" id="rb-p3-7"><div class="sb"><label for="rb-p3-7">Add an unknown type code scenario.</label></div></li>
+<li><input type="checkbox" id="rb-p3-8"><div class="sb"><label for="rb-p3-8">Implement <code>--big-change</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p3-9"><div class="sb"><label for="rb-p3-9">Generate checksums and file sizes.</label></div></li>
+<li><input type="checkbox" id="rb-p3-10"><div class="sb"><label for="rb-p3-10">Write the manifest last.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>Complete, repeatable CRM export folders are available in GCS.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d3" id="p4"><header><div class="t"><span class="pno">Phase 4</span><h3>Build the loader</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B3.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p4-1"><div class="sb"><label for="rb-p4-1">Create the Python Cloud Run job.</label></div></li>
+<li><input type="checkbox" id="rb-p4-2"><div class="sb"><label for="rb-p4-2">List export folders.</label></div></li>
+<li><input type="checkbox" id="rb-p4-3"><div class="sb"><label for="rb-p4-3">Read <code>raw_crm.load_log</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p4-4"><div class="sb"><label for="rb-p4-4">Skip already loaded folders.</label></div></li>
+<li><input type="checkbox" id="rb-p4-5"><div class="sb"><label for="rb-p4-5">Stop at the first held folder.</label></div></li>
+<li><input type="checkbox" id="rb-p4-6"><div class="sb"><label for="rb-p4-6">Process new folders oldest first.</label></div></li>
+<li><input type="checkbox" id="rb-p4-7"><div class="sb"><label for="rb-p4-7">Validate the manifest.</label></div></li>
+<li><input type="checkbox" id="rb-p4-8"><div class="sb"><label for="rb-p4-8">Validate file sizes and checksums.</label></div></li>
+<li><input type="checkbox" id="rb-p4-9"><div class="sb"><label for="rb-p4-9">Load the CSV files into landing tables.</label></div></li>
+<li><input type="checkbox" id="rb-p4-10"><div class="sb"><label for="rb-p4-10">Implement cleanup on partial failure.</label></div></li>
+<li><input type="checkbox" id="rb-p4-11"><div class="sb"><label for="rb-p4-11">Write load tracking records.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>New CRM export folders are loaded safely and re-runs are idempotent.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d3" id="p5"><header><div class="t"><span class="pno">Phase 5</span><h3>Build CRM transformation models</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B4.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p5-1"><div class="sb"><label for="rb-p5-1">Create <code>stg_crm__account</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p5-2"><div class="sb"><label for="rb-p5-2">Create <code>stg_crm__store</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p5-3"><div class="sb"><label for="rb-p5-3">Create <code>stg_crm__work_order</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p5-4"><div class="sb"><label for="rb-p5-4">Apply data typing.</label></div></li>
+<li><input type="checkbox" id="rb-p5-5"><div class="sb"><label for="rb-p5-5">Tokenize account contact information.</label></div></li>
+<li><input type="checkbox" id="rb-p5-6"><div class="sb"><label for="rb-p5-6">Remove original contact name and email columns.</label></div></li>
+<li><input type="checkbox" id="rb-p5-7"><div class="sb"><label for="rb-p5-7">Create <code>int_crm__account</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p5-8"><div class="sb"><label for="rb-p5-8">Create <code>int_crm__store</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p5-9"><div class="sb"><label for="rb-p5-9">Create <code>int_crm__work_order</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p5-10"><div class="sb"><label for="rb-p5-10">Implement incremental merge logic.</label></div></li>
+<li><input type="checkbox" id="rb-p5-11"><div class="sb"><label for="rb-p5-11">Verify idempotency and watermark behaviour.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>CRM records are available in a standardized current-state form.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d3" id="p6"><header><div class="t"><span class="pno">Phase 6</span><h3>Implement change protection</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B5.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p6-1"><div class="sb"><label for="rb-p6-1">Read the previous successfully loaded account export.</label></div></li>
+<li><input type="checkbox" id="rb-p6-2"><div class="sb"><label for="rb-p6-2">Compare account ID and update timestamp pairs.</label></div></li>
+<li><input type="checkbox" id="rb-p6-3"><div class="sb"><label for="rb-p6-3">Identify disappeared accounts.</label></div></li>
+<li><input type="checkbox" id="rb-p6-4"><div class="sb"><label for="rb-p6-4">Calculate the change ratio.</label></div></li>
+<li><input type="checkbox" id="rb-p6-5"><div class="sb"><label for="rb-p6-5">Hold exports above 50%.</label></div></li>
+<li><input type="checkbox" id="rb-p6-6"><div class="sb"><label for="rb-p6-6">Write the structured log event.</label></div></li>
+<li><input type="checkbox" id="rb-p6-7"><div class="sb"><label for="rb-p6-7">Trigger the alert.</label></div></li>
+<li><input type="checkbox" id="rb-p6-8"><div class="sb"><label for="rb-p6-8">Implement manual approval.</label></div></li>
+<li><input type="checkbox" id="rb-p6-9"><div class="sb"><label for="rb-p6-9">Test 0%, 49%, 51%, and first-export scenarios.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>AT-21 passes.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d5" id="p7"><header><div class="t"><span class="pno">Phase 7</span><h3>Implement customer classification</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B6.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p7-1"><div class="sb"><label for="rb-p7-1">Create <code>map_customer_type</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p7-2"><div class="sb"><label for="rb-p7-2">Implement <code>is_customer()</code> macro.</label></div></li>
+<li><input type="checkbox" id="rb-p7-3"><div class="sb"><label for="rb-p7-3">Create <code>dim_account</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p7-4"><div class="sb"><label for="rb-p7-4">Populate customer type enum and name.</label></div></li>
+<li><input type="checkbox" id="rb-p7-5"><div class="sb"><label for="rb-p7-5">Derive <code>is_customer</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p7-6"><div class="sb"><label for="rb-p7-6">Assign the top-level account identifier as the account's <code>tenant_id</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p7-7"><div class="sb"><label for="rb-p7-7">Handle unknown type codes.</label></div></li>
+<li><input type="checkbox" id="rb-p7-8"><div class="sb"><label for="rb-p7-8">Add dbt tests.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>One standardized customer definition is available in <code>dim_account</code>.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d5" id="p8"><header><div class="t"><span class="pno">Phase 8</span><h3>Implement tenant assignment</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B7.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p8-1"><div class="sb"><label for="rb-p8-1">Read G2 store data from <code>raw_g2</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p8-2"><div class="sb"><label for="rb-p8-2">Read CRM store records from <code>int_crm__store</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p8-3"><div class="sb"><label for="rb-p8-3">Match using <code>g2_store_id</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p8-4"><div class="sb"><label for="rb-p8-4">Resolve the associated CRM account.</label></div></li>
+<li><input type="checkbox" id="rb-p8-5"><div class="sb"><label for="rb-p8-5">Follow the account hierarchy to the top-level account.</label></div></li>
+<li><input type="checkbox" id="rb-p8-6"><div class="sb"><label for="rb-p8-6">Assign the top-level account ID as <code>tenant_id</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p8-7"><div class="sb"><label for="rb-p8-7">Calculate <code>is_customer_store</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p8-8"><div class="sb"><label for="rb-p8-8">Identify stores without an active CRM mapping.</label></div></li>
+<li><input type="checkbox" id="rb-p8-9"><div class="sb"><label for="rb-p8-9">Record DQ37 warnings.</label></div></li>
+<li><input type="checkbox" id="rb-p8-10"><div class="sb"><label for="rb-p8-10">Enrich the existing POC C <code>dim_store</code>.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>Every store has a tenant assignment or is explicitly reported as an exception.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d5" id="p9"><header><div class="t"><span class="pno">Phase 9</span><h3>Validate customer and tenant rules</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B8.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p9-1"><div class="sb"><label for="rb-p9-1">Run the customer classification tests.</label></div></li>
+<li><input type="checkbox" id="rb-p9-2"><div class="sb"><label for="rb-p9-2">Validate tenant mappings.</label></div></li>
+<li><input type="checkbox" id="rb-p9-3"><div class="sb"><label for="rb-p9-3">Run the single-definition CI script.</label></div></li>
+<li><input type="checkbox" id="rb-p9-4"><div class="sb"><label for="rb-p9-4">Plant a vendor account with two stores.</label></div></li>
+<li><input type="checkbox" id="rb-p9-5"><div class="sb"><label for="rb-p9-5">Confirm both stores are non-customer stores.</label></div></li>
+<li><input type="checkbox" id="rb-p9-6"><div class="sb"><label for="rb-p9-6">Run the POC D security suite when available.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>AT-19 passes.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d3" id="p10"><header><div class="t"><span class="pno">Phase 10</span><h3>Build work-order fact</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<p class="prose">Complete B9.</p>
+<ol class="steps">
+<li><input type="checkbox" id="rb-p10-1"><div class="sb"><label for="rb-p10-1">Read <code>int_crm__work_order</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p10-2"><div class="sb"><label for="rb-p10-2">Resolve account, store, and device references.</label></div></li>
+<li><input type="checkbox" id="rb-p10-3"><div class="sb"><label for="rb-p10-3">Apply tenant assignment (from <code>int_store__tenant</code>, B7).</label></div></li>
+<li><input type="checkbox" id="rb-p10-4"><div class="sb"><label for="rb-p10-4">Create <code>fct_work_order</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p10-5"><div class="sb"><label for="rb-p10-5">Add <code>opened_date</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p10-6"><div class="sb"><label for="rb-p10-6">Partition on <code>opened_date</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p10-7"><div class="sb"><label for="rb-p10-7">Apply tests and lineage.</label></div></li>
+<li><input type="checkbox" id="rb-p10-8"><div class="sb"><label for="rb-p10-8">Resolve the unknown-reference handling decision before finalizing constraints.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>The work-order fact is built and tested.</span></div>
+</div></article>
+<article class="phase ownable" data-own="d3 d5" id="p11"><header><div class="t"><span class="pno">Phase 11</span><h3>Final integration</h3></div><div class="pbar"><i></i></div></header><div class="body">
+<ol class="steps">
+<li><input type="checkbox" id="rb-p11-1"><div class="sb"><label for="rb-p11-1">Run the CRM simulator.</label></div></li>
+<li><input type="checkbox" id="rb-p11-2"><div class="sb"><label for="rb-p11-2">Run the loader.</label></div></li>
+<li><input type="checkbox" id="rb-p11-3"><div class="sb"><label for="rb-p11-3">Run dbt staging and intermediate models.</label></div></li>
+<li><input type="checkbox" id="rb-p11-4"><div class="sb"><label for="rb-p11-4">Run account and tenant models.</label></div></li>
+<li><input type="checkbox" id="rb-p11-5"><div class="sb"><label for="rb-p11-5">Build <code>fct_work_order</code>.</label></div></li>
+<li><input type="checkbox" id="rb-p11-6"><div class="sb"><label for="rb-p11-6">Run AT-19.</label></div></li>
+<li><input type="checkbox" id="rb-p11-7"><div class="sb"><label for="rb-p11-7">Run AT-20.</label></div></li>
+<li><input type="checkbox" id="rb-p11-8"><div class="sb"><label for="rb-p11-8">Run AT-21.</label></div></li>
+<li><input type="checkbox" id="rb-p11-9"><div class="sb"><label for="rb-p11-9">Verify DQ36, DQ37, DQ40, DQ41, and DQ42.</label></div></li>
+<li><input type="checkbox" id="rb-p11-10"><div class="sb"><label for="rb-p11-10">Confirm the downstream POC C and POC D dependencies are satisfied.</label></div></li>
+</ol>
+<div class="expect"><b>Result</b><span>POC B is ready for integration with the remaining Phase 2 work.</span></div>
+</div></article>
+</section>
+<!-- ======================= 18 ======================= -->
+<section class="doc" id="s18">
+  <div class="sec-head"><span class="no">18</span><h2>Expected repository structure</h2></div>
+<p class="prose">The approved task notes identify <code>loaders/crm/</code> and certain dbt seeds, macros, and CI scripts.</p>
+<p class="prose">The following is a suggested logical organization, not a confirmed complete repository tree:</p>
+<pre class="tree">project/
+│
+├── loaders/
+│   └── crm/
+│       └── CRM loader implementation
+│
+├── seeds/
+│   └── map_customer_type.csv
+│
+├── macros/
+│   └── is_customer.sql
+│
+├── models/
+│   ├── staging/
+│   │   └── crm/
+│   │       ├── stg_crm__account.sql
+│   │       ├── stg_crm__store.sql
+│   │       └── stg_crm__work_order.sql
+│   │
+│   ├── intermediate/
+│   │   ├── crm/
+│   │   │   ├── int_crm__account.sql
+│   │   │   ├── int_crm__store.sql
+│   │   │   └── int_crm__work_order.sql
+│   │   │
+│   │   └── stores/
+│   │       └── int_store__tenant.sql
+│   │
+│   └── marts/
+│       ├── dim_account.sql
+│       ├── dim_store.sql
+│       └── fct_work_order.sql
+│
+├── scripts/
+│   └── ci/
+│       └── check_single_definition.py
+│
+├── simulator/
+│   └── CRM export writer
+│
+└── specs.md</pre>
+<p class="prose">The exact folder layout must follow the existing repository conventions.</p>
+</section>
+<!-- ======================= 19 ======================= -->
+<section class="doc" id="s19">
+  <div class="sec-head"><span class="no">19</span><h2>Deliverables</h2></div>
+<div class="tscroll"><table><thead><tr><th>Deliverable</th><th>Description</th></tr></thead><tbody><tr><td>CRM export specification</td><td>Documented account, store, and work-order schemas</td></tr><tr><td>CRM simulator</td><td>Hourly export generation with test scenarios</td></tr><tr><td>CRM export folders</td><td>CSV files and manifest in GCS</td></tr><tr><td>CRM loader</td><td><code>poc-crm-loader</code> Cloud Run job</td></tr><tr><td>Load tracking</td><td><code>raw_crm.load_log</code></td></tr><tr><td>Raw CRM tables</td><td>Account, store, and work-order landing tables</td></tr><tr><td>Staging models</td><td>Three <code>stg_crm__*</code> models</td></tr><tr><td>Intermediate models</td><td>Three <code>int_crm__*</code> models</td></tr><tr><td>Customer type seed</td><td><code>map_customer_type</code></td></tr><tr><td>Shared customer macro</td><td><code>is_customer()</code></td></tr><tr><td>Account dimension</td><td><code>dim_account</code></td></tr><tr><td>Tenant mapping model</td><td><code>int_store__tenant</code></td></tr><tr><td>Enriched store dimension</td><td><code>dim_store</code> with tenant and customer-store columns</td></tr><tr><td>Work-order fact</td><td><code>fct_work_order</code></td></tr><tr><td>Data-quality checks</td><td>DQ36, DQ37, DQ40, DQ41, DQ42</td></tr><tr><td>Acceptance tests</td><td>AT-19, AT-20, AT-21</td></tr><tr><td>Technical documentation</td><td>Source schema, table dependencies, execution and test details</td></tr></tbody></table></div>
+</section>
+<!-- ======================= 20 ======================= -->
+<section class="doc" id="s20">
+  <div class="sec-head"><span class="no">20</span><h2>Definition of done</h2></div>
+<div class="cols3" id="dod">
+<div class="panel"><h4>CRM ingestion</h4>
+<ul class="check">
+<li><input type="checkbox" id="dod-1"><label for="dod-1">Hourly CRM exports are generated.</label></li>
+<li><input type="checkbox" id="dod-2"><label for="dod-2">Each export includes account, store, and work-order CSV files.</label></li>
+<li><input type="checkbox" id="dod-3"><label for="dod-3">Manifest is written last.</label></li>
+<li><input type="checkbox" id="dod-4"><label for="dod-4">File size and MD5 validation works.</label></li>
+<li><input type="checkbox" id="dod-5"><label for="dod-5">The loader processes new exports automatically.</label></li>
+<li><input type="checkbox" id="dod-6"><label for="dod-6">Re-running the loader does not duplicate an export.</label></li>
+<li><input type="checkbox" id="dod-7"><label for="dod-7">Failed exports are cleaned up and retried safely.</label></li>
+<li><input type="checkbox" id="dod-8"><label for="dod-8">Load history is recorded.</label></li>
+</ul>
+</div>
+<div class="panel"><h4>Change protection</h4>
+<ul class="check">
+<li><input type="checkbox" id="dod-9"><label for="dod-9">Change ratio is calculated correctly.</label></li>
+<li><input type="checkbox" id="dod-10"><label for="dod-10">Exports above 50% change are held.</label></li>
+<li><input type="checkbox" id="dod-11"><label for="dod-11">Held exports are not loaded.</label></li>
+<li><input type="checkbox" id="dod-12"><label for="dod-12">Later exports wait behind held exports.</label></li>
+<li><input type="checkbox" id="dod-13"><label for="dod-13">Alert is generated.</label></li>
+<li><input type="checkbox" id="dod-14"><label for="dod-14">Manual approval releases the export.</label></li>
+<li><input type="checkbox" id="dod-15"><label for="dod-15">AT-21 passes.</label></li>
+</ul>
+</div>
+<div class="panel"><h4>Customer definition</h4>
+<ul class="check">
+<li><input type="checkbox" id="dod-16"><label for="dod-16">Customer type seed is implemented.</label></li>
+<li><input type="checkbox" id="dod-17"><label for="dod-17">Shared <code>is_customer()</code> macro is implemented.</label></li>
+<li><input type="checkbox" id="dod-18"><label for="dod-18"><code>dim_account</code> is built.</label></li>
+<li><input type="checkbox" id="dod-19"><label for="dod-19">Unknown types are classified as <code>UNKNOWN</code>.</label></li>
+<li><input type="checkbox" id="dod-20"><label for="dod-20">Unknown types are not treated as customers.</label></li>
+<li><input type="checkbox" id="dod-21"><label for="dod-21">The single-definition CI check passes.</label></li>
+</ul>
+</div>
+<div class="panel"><h4>Tenant assignment</h4>
+<ul class="check">
+<li><input type="checkbox" id="dod-22"><label for="dod-22">G2 stores are matched to active CRM store records.</label></li>
+<li><input type="checkbox" id="dod-23"><label for="dod-23">Account hierarchy is resolved.</label></li>
+<li><input type="checkbox" id="dod-24"><label for="dod-24">Top-level account ID is used as tenant ID.</label></li>
+<li><input type="checkbox" id="dod-25"><label for="dod-25"><code>dim_store</code> is enriched.</label></li>
+<li><input type="checkbox" id="dod-26"><label for="dod-26">Missing CRM store records are reported by DQ37.</label></li>
+<li><input type="checkbox" id="dod-27"><label for="dod-27">Non-customer stores are classified correctly.</label></li>
+</ul>
+</div>
+<div class="panel"><h4>Work orders</h4>
+<ul class="check">
+<li><input type="checkbox" id="dod-28"><label for="dod-28"><code>int_crm__work_order</code> is built.</label></li>
+<li><input type="checkbox" id="dod-29"><label for="dod-29"><code>fct_work_order</code> is built.</label></li>
+<li><input type="checkbox" id="dod-30"><label for="dod-30"><code>opened_date</code> partitioning is implemented.</label></li>
+<li><input type="checkbox" id="dod-31"><label for="dod-31">Work-order relationships are validated.</label></li>
+<li><input type="checkbox" id="dod-32"><label for="dod-32">Unknown-reference handling is resolved.</label></li>
+</ul>
+</div>
+<div class="panel"><h4>Acceptance tests</h4>
+<ul class="check">
+<li><input type="checkbox" id="dod-33"><label for="dod-33">AT-19 passes.</label></li>
+<li><input type="checkbox" id="dod-34"><label for="dod-34">AT-20 passes.</label></li>
+<li><input type="checkbox" id="dod-35"><label for="dod-35">AT-21 passes.</label></li>
+</ul>
+</div>
+</div>
+</section>
+<!-- ======================= 21 ======================= -->
+<section class="doc" id="s21">
+  <div class="sec-head"><span class="no">21</span><h2>Open design decisions and clarifications</h2></div>
+<p class="prose">The following details should be confirmed before final implementation. They are not all specified in the approved POC B plan.</p>
+<div class="tscroll"><table><thead><tr><th>Item</th><th>Question / clarification required</th><th>Reason</th></tr></thead><tbody><tr><td>CRM export location</td><td>Confirm the exact bucket name and environment-specific folder configuration</td><td>Required for deployment</td></tr><tr><td>BigQuery dataset configuration</td><td>Confirm exact project, dataset, and table names for all environments</td><td>Required for loader and dbt configuration</td></tr><tr><td>IAM</td><td>Confirm the Cloud Run service account and its GCS and BigQuery permissions</td><td>Required for execution</td></tr><tr><td>Tokenization</td><td>Confirm the existing shared tokenization macro, key storage, and access controls</td><td>Required for personal-data protection</td></tr><tr><td>Account hierarchy</td><td>Define behaviour for missing parent accounts or hierarchy loops</td><td>Schema document proposes DQ45</td></tr><tr><td>Store matching</td><td>Define behaviour for multiple active CRM store matches</td><td>Schema document proposes DQ46</td></tr><tr><td>Work-order references</td><td>Resolve the conflict between retaining unknown references and required account relationships</td><td>Required for DQ47 and fact integrity</td></tr><tr><td>Watermark edge cases</td><td>Test equal timestamps and late-arriving records</td><td>Avoid missing updates</td></tr><tr><td>Additional schema fields</td><td>Confirm proposed <code>hierarchy_depth</code>, <code>tenant_reason</code>, and <code>is_open</code> fields</td><td>Not all are approved plan requirements</td></tr><tr><td>Physical design</td><td>Confirm proposed clustering for <code>fct_work_order</code></td><td>Schema proposal, beyond the explicit partition requirement</td></tr><tr><td>Loader metadata</td><td>Confirm whether optional load-log fields are needed</td><td>Improves operational observability</td></tr><tr><td>Type-2 history</td><td>Decide whether to implement B10 after G7</td><td>Stretch scope</td></tr></tbody></table></div>
+<h4>Approved versus proposed items</h4>
+<div class="cols2"><div class="panel"><h4>Approved by the Phase 2 plan</h4><ul class="bul small">
+<li>Hourly CRM exports.</li>
+<li>Manifest written last.</li>
+<li>Three CRM source files.</li>
+<li>Cloud Run loader.</li>
+<li>Idempotent loading.</li>
+<li>Load tracking.</li>
+<li>Watermark merge models.</li>
+<li>Change-size guard above 50%.</li>
+<li>Customer type mapping.</li>
+<li>Shared customer macro.</li>
+<li><code>dim_account</code>.</li>
+<li>Tenant assignment using the top-level account.</li>
+<li><code>dim_store</code> enrichment.</li>
+<li><code>fct_work_order</code> partitioned by <code>opened_date</code>.</li>
+<li>DQ36, DQ37, DQ40, DQ41, DQ42.</li>
+<li>AT-19, AT-20, AT-21.</li>
+</ul></div><div class="panel"><h4>Proposed or requiring confirmation</h4><ul class="bul small">
+<li>Specific ID patterns for account, CRM store, and work order.</li>
+<li><code>hierarchy_depth</code> and <code>tenant_reason</code>.</li>
+<li><code>is_open</code> in <code>fct_work_order</code>.</li>
+<li>Proposed clustering for <code>fct_work_order</code>.</li>
+<li>DQ45–DQ47.</li>
+<li>Exact tokenization algorithm and key implementation.</li>
+<li>Exact Cloud Run deployment commands and IAM configuration.</li>
+<li>Exact physical DDL and all environment-specific configuration.</li>
+</ul></div></div>
+</section>
+<!-- ======================= 22 ======================= -->
+<section class="doc" id="s22">
+  <div class="sec-head"><span class="no">22</span><h2>Glossary</h2></div>
+<div class="gl-tools"><input id="glq" type="search" placeholder="Filter terms" aria-label="Filter glossary terms"><span class="small muted" id="glcnt"></span></div>
+<div class="tscroll"><table id="gloss"><thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody><tr><td>CRM</td><td>Customer Relationship Management system</td></tr><tr><td>Account</td><td>An organization or entity recorded in CRM</td></tr><tr><td>Customer</td><td>An account classified as CUSTOMER and Active</td></tr><tr><td>Vendor</td><td>An account classified as VENDOR</td></tr><tr><td>Partner</td><td>An account classified as PARTNER</td></tr><tr><td>Prospect</td><td>A potential customer classified as PROSPECT</td></tr><tr><td>Tenant</td><td>The top-level customer organization used to isolate data</td></tr><tr><td><code>tenant_id</code></td><td>Identifier of the top-level CRM account</td></tr><tr><td>G2</td><td>Operational source system providing store and device information</td></tr><tr><td>GCS</td><td>Google Cloud Storage</td></tr><tr><td>BigQuery</td><td>Google Cloud's analytical data warehouse</td></tr><tr><td>Cloud Run Job</td><td>Managed execution environment for containerized jobs</td></tr><tr><td>dbt</td><td>Data transformation framework</td></tr><tr><td>Raw layer</td><td>Stores source data with minimal transformation</td></tr><tr><td>Staging layer</td><td>Applies typing, cleanup, and privacy transformations</td></tr><tr><td>Intermediate layer</td><td>Applies business logic and incremental transformations</td></tr><tr><td>Warehouse dimension</td><td>Descriptive entity table such as <code>dim_account</code></td></tr><tr><td>Fact table</td><td>Table containing measurable business events or transactions</td></tr><tr><td>Watermark</td><td>A value used to identify records that have changed since the previous processing run</td></tr><tr><td>Idempotency</td><td>Re-running an operation produces no duplicate results</td></tr><tr><td>Manifest</td><td>File containing export metadata, including size and checksum</td></tr><tr><td>MD5</td><td>Checksum used to validate file integrity</td></tr><tr><td>DQ</td><td>Data-quality check</td></tr><tr><td>AT</td><td>Acceptance test</td></tr><tr><td>POC</td><td>Proof of Concept</td></tr></tbody></table></div>
+</section>
+<!-- ======================= 23 ======================= -->
+<section class="doc" id="s23">
+  <div class="sec-head"><span class="no">23</span><h2>Final understanding</h2></div>
+<p class="prose">POC B establishes the customer and tenant foundation for the Store Alert Data Lake.</p>
+<p class="prose">It starts with CRM exports and creates a controlled ingestion pipeline. The loader validates each export, prevents duplicate loads, tracks failures, and holds unusually large changes for manual approval.</p>
+<p class="prose">The data is then transformed through staging and intermediate models. Personal contact information is tokenized before leaving staging. A shared customer type mapping and macro ensure that customer classification is consistent.</p>
+<p class="prose">The resulting <code>dim_account</code> becomes the central account definition.</p>
+<p class="prose">Next, G2 stores are matched with CRM stores, their account relationships are resolved, and the top-level CRM account ID becomes the store's <code>tenant_id</code>. The existing <code>dim_store</code> from POC C is enriched with tenant and customer-store information.</p>
+<p class="prose">Finally, CRM work orders are transformed into <code>fct_work_order</code>.</p>
+<p class="prose">The dependency chain is:</p>
+<div class="flow">
+    <span class="fnode" style="--c:var(--crm)">CRM export</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--ops)">poc-crm-loader</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--raw)">raw_crm</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--stg)">stg_crm__* → int_crm__*</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--fct)">dim_account</span><span class="arr">·</span>
+    <span class="fnode" style="--c:var(--stg)">int_store__tenant</span><span class="arr">→</span>
+    <span class="fnode ext" style="--c:var(--pend)">dim_store</span>
+  </div>
+  <div class="flow">
+    <span class="fnode" style="--c:var(--stg)">int_crm__work_order</span><span class="arr">+</span>
+    <span class="fnode" style="--c:var(--stg)">int_store__tenant</span><span class="arr">→</span>
+    <span class="fnode" style="--c:var(--fct)">fct_work_order</span>
+  </div>
+<p class="prose">The outputs then support the rest of Phase 2:</p>
+<ul class="bul">
+<li><b>POC C</b> consumes the account, tenant, and work-order models as part of the warehouse transformation layer.</li>
+<li><b>POC D</b> uses customer and tenant information to enforce tenant-level security.</li>
+<li><b>POC E</b> orchestrates and monitors CRM ingestion and transformation.</li>
+<li><b>POC F</b> can use the completed warehouse tables for performance and cost evaluation.</li>
+</ul>
+<p class="prose">The central principle is:</p>
+<div class="note dec"><b>The central principle</b><p style="font-size:16px">CRM defines who the customer is. The top-level CRM account defines the tenant. Every downstream warehouse model and security rule must use those same definitions.</p></div>
+</section>
+<footer class="foot">
+  <p>Sources: <code>GKS-POC-Phase2-detailed-plan.md</code> (v2.0, section 7) and <code>GKS-POC-Phase2-schema.html</code>. This page presents the content of <code>GKS-POC-Phase2-POC-B-crm-data-model-and-integration.md</code> in the same layout as the POC A guide. Runbook ticks and the highlight choice are stored only in this browser.</p>
+</footer>
+</main>
+</div>
+
+<script>
+(function () {
+"use strict";
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+var store = {
+  get: function (k, d) { try { var v = localStorage.getItem("pocB:" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set: function (k, v) { try { localStorage.setItem("pocB:" + k, JSON.stringify(v)); } catch (e) {} }
+};
+var escAll = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+var escCode = function (s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); };
+var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- code blocks ---------- */
+var TAGS = { plan: ["plan", "Plan"], sug: ["sug", "Suggested"], sch: ["sch", "Schema"] };
+var HASH = { bash: 1, hcl: 1, yaml: 1, python: 1, dockerfile: 1 };
+function commentAt(line, lang) {
+  var q = null;
+  for (var i = 0; i < line.length; i++) {
+    var ch = line[i];
+    if (q) { if (ch === q) q = null; continue; }
+    if (ch === "'" || ch === '"') { q = ch; continue; }
+    if (lang === "sql" && ch === "-" && line[i + 1] === "-") return i;
+    if (HASH[lang] && ch === "#" && (i === 0 || /\s/.test(line[i - 1]))) return i;
+  }
+  return -1;
+}
+function highlight(code, lang) {
+  return code.split("\n").map(function (line) {
+    var i = commentAt(line, lang);
+    if (i < 0) return escCode(line);
+    return escCode(line.slice(0, i)) + '<span class="cm">' + escCode(line.slice(i)) + "</span>";
+  }).join("\n");
+}
+function selectNode(n) { try { var r = document.createRange(); r.selectNodeContents(n); var s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch (e) {} }
+function copyText(text, btn, pre) {
+  var done = function (ok) { btn.textContent = ok ? "Copied" : "Selected: press Ctrl+C"; setTimeout(function () { btn.textContent = "Copy"; }, 1800); };
+  try {
+    navigator.clipboard.writeText(text).then(function () { done(true); }, function () { selectNode(pre); done(false); });
+  } catch (e) { selectNode(pre); done(false); }
+}
+$$("script.code").forEach(function (s) {
+  var code = s.textContent.replace(/^\n+/, "").replace(/\s+$/, "");
+  var lang = s.getAttribute("data-lang") || "";
+  var tag = TAGS[s.getAttribute("data-tag")];
+  var title = s.getAttribute("data-title");
+  var fig = document.createElement("figure"); fig.className = "code";
+  var cap = document.createElement("figcaption");
+  cap.innerHTML = '<span class="lang">' + escAll(lang) + "</span>" + (title ? '<span class="fn">' + escAll(title) + "</span>" : "") +
+    (tag ? '<span class="pill ' + tag[0] + '">' + tag[1] + "</span>" : "") + '<button class="btn" type="button">Copy</button>';
+  var pre = document.createElement("pre"); var c = document.createElement("code");
+  c.innerHTML = highlight(code, lang); pre.appendChild(c);
+  fig.appendChild(cap); fig.appendChild(pre);
+  cap.querySelector("button").addEventListener("click", function (ev) { copyText(code, ev.currentTarget, pre); });
+  s.parentNode.replaceChild(fig, s);
+});
+
+/* ---------- theme ---------- */
+var root = document.documentElement;
+var savedTheme = store.get("theme", null);
+if (savedTheme === "dark" || savedTheme === "light") root.setAttribute("data-theme", savedTheme);
+function curTheme() { return root.getAttribute("data-theme") || (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }
+function themeLabel() { $("#themeBtn").textContent = curTheme() === "dark" ? "Light theme" : "Dark theme"; }
+$("#themeBtn").addEventListener("click", function () { var n = curTheme() === "dark" ? "light" : "dark"; root.setAttribute("data-theme", n); store.set("theme", n); themeLabel(); });
+themeLabel();
+
+/* ---------- contents: scrollspy and mobile toggle ---------- */
+var toc = $("#toc"), tocBtn = $("#tocBtn");
+var tocLinks = $$(".toc a");
+var tocSecs = tocLinks.map(function (a) { return document.getElementById(a.getAttribute("href").slice(1)); });
+var spyTick = false;
+function spy() {
+  spyTick = false;
+  var idx = 0;
+  for (var i = 0; i < tocSecs.length; i++) { if (tocSecs[i] && tocSecs[i].getBoundingClientRect().top < 140) idx = i; }
+  tocLinks.forEach(function (a, i) { a.classList.toggle("on", i === idx); if (i === idx) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); });
+}
+window.addEventListener("scroll", function () { if (!spyTick) { spyTick = true; requestAnimationFrame(spy); } }, { passive: true });
+spy();
+tocBtn.addEventListener("click", function () { var o = !toc.classList.contains("open"); toc.classList.toggle("open", o); tocBtn.setAttribute("aria-expanded", String(o)); });
+tocLinks.forEach(function (a) { a.addEventListener("click", function () { toc.classList.remove("open"); tocBtn.setAttribute("aria-expanded", "false"); }); });
+document.addEventListener("keydown", function (e) { if (e.key === "Escape" && toc.classList.contains("open")) { toc.classList.remove("open"); tocBtn.setAttribute("aria-expanded", "false"); tocBtn.focus(); } });
+
+/* ---------- highlight one developer ---------- */
+function setMe(v) {
+  if (v) document.body.setAttribute("data-me", v); else document.body.removeAttribute("data-me");
+  $$(".owners .btn").forEach(function (b) { b.setAttribute("aria-pressed", String((b.getAttribute("data-me") || "") === v)); });
+  store.set("me", v); var nn = $("#meNote"); if (nn) nn.textContent = v ? "Dev " + v.slice(1) + ": highlighted in sections 15 and 17" : "";
+}
+$$(".owners .btn").forEach(function (b) { b.addEventListener("click", function () { setMe(b.getAttribute("data-me") || ""); }); });
+
+/* ---------- timeline ---------- */
+var OWNC = { d3: "--fct", d5: "--evt" };
+var GT = [
+  ["B1", "CRM export spec and type codes", "d5", 1, 2, "—"],
+  ["B2", "CRM export simulator", "d3", 3, 4, "0.6, B1"],
+  ["B6", "Seed, macro, dim_account", "d5", 3, 4, "B1 (B4 can be stubbed)"],
+  ["B3", "CRM loader", "d3", 4, 5, "B2"],
+  ["B7", "Tenant assignment, dim_store", "d5", 4, 5, "B6, C2"],
+  ["B4", "Staging and watermark merge", "d3", 5, 6, "B3, 0.4"],
+  ["B8", "AT-19 checks", "d5", 5, 6, "B6, B7"],
+  ["B5", "Change-size guard, approve", "d3", 6, 7, "B3"],
+  ["B9", "fct_work_order", "d3", 8, 8, "B4"]
+];
+(function drawGantt() {
+  var g = $("#gantt"); if (!g) return;
+  var h = '<div class="gh" style="text-align:left">Task</div>';
+  for (var d = 1; d <= 12; d++) h += '<div class="gh">Day ' + d + "</div>";
+  GT.forEach(function (r) {
+    var own = r[2], color = OWNC[own], span = r[4] - r[3] + 1;
+    var tip = r[0] + " · " + r[1] + " · Dev " + own.slice(1) + " · Day " + (span > 1 ? r[3] + "–" + r[4] : r[3]) + " · Needs " + r[5];
+    h += '<div class="gl ownable" data-own="' + own + '"><code>' + escAll(r[0]) + "</code> " + escAll(r[1]) + "</div>";
+    for (var d2 = 1; d2 <= 12; d2++) {
+      var bar = d2 === r[3] ? '<div class="bar" style="--c:var(' + color + ");left:2px;width:calc(" + span + '00% - 4px)" title="' + escAll(tip) + '" aria-label="' + escAll(tip) + '">' + escAll(r[0]) + "</div>" : "";
+      h += '<div class="gcell ownable" data-own="' + own + '">' + bar + "</div>";
+    }
+  });
+  g.innerHTML = h;
+})();
+
+/* ---------- runbook and definition-of-done ticks ---------- */
+var ticks = store.get("ticks", {});
+var rbBoxes = $$("#s17 ol.steps input[type=checkbox]");
+var dodBoxes = $$("#dod input[type=checkbox]");
+function markLi(b) { var li = b.closest("li"); if (li) li.classList.toggle("done", b.checked); }
+function progress() {
+  $$("#s17 .phase").forEach(function (ph) {
+    var bs = $$("ol.steps input", ph), n = bs.filter(function (x) { return x.checked; }).length, bar = $(".pbar i", ph);
+    if (bar) bar.style.width = (bs.length ? (n / bs.length) * 100 : 0) + "%";
+  });
+  var n = rbBoxes.filter(function (x) { return x.checked; }).length;
+  $("#allBar").style.width = (rbBoxes.length ? (n / rbBoxes.length) * 100 : 0) + "%";
+  $("#allTxt").textContent = n + " of " + rbBoxes.length + " steps done";
+  $("#progMini").textContent = "Runbook " + n + "/" + rbBoxes.length;
+}
+rbBoxes.concat(dodBoxes).forEach(function (b) {
+  b.checked = !!ticks[b.id]; markLi(b);
+  b.addEventListener("change", function () { if (b.checked) ticks[b.id] = 1; else delete ticks[b.id]; store.set("ticks", ticks); markLi(b); progress(); });
+});
+progress();
+var resetArmed = null;
+$("#resetBtn").addEventListener("click", function () {
+  var btn = this;
+  if (!resetArmed) { btn.textContent = "Click again to clear"; resetArmed = setTimeout(function () { resetArmed = null; btn.textContent = "Clear all ticks"; }, 4000); return; }
+  clearTimeout(resetArmed); resetArmed = null;
+  rbBoxes.forEach(function (b) { b.checked = false; delete ticks[b.id]; markLi(b); });
+  store.set("ticks", ticks); progress(); btn.textContent = "Cleared"; setTimeout(function () { btn.textContent = "Clear all ticks"; }, 1500);
+});
+
+/* ---------- glossary filter ---------- */
+(function () {
+  var rows = $$("#gloss tbody tr"), q = $("#glq"), cnt = $("#glcnt");
+  if (!q) return;
+  function run() {
+    var v = q.value.trim().toLowerCase(), n = 0;
+    rows.forEach(function (r) { var ok = !v || r.textContent.toLowerCase().indexOf(v) >= 0; r.style.display = ok ? "" : "none"; if (ok) n++; });
+    cnt.textContent = n + " of " + rows.length + " terms";
+  }
+  q.addEventListener("input", run); run();
+})();
+
+/* ---------- search ---------- */
+var marks = [], cur = -1, qTimer = null;
+function clearMarks() {
+  marks.forEach(function (m) { var p = m.parentNode; if (!p) return; p.replaceChild(document.createTextNode(m.textContent), m); p.normalize(); });
+  marks = []; cur = -1;
+}
+function doSearch(q) {
+  clearMarks();
+  q = q.trim();
+  if (q.length < 2) { $("#qcnt").textContent = ""; return; }
+  var re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  var walker = document.createTreeWalker($("#doc"), NodeFilter.SHOW_TEXT, { acceptNode: function (n) {
+    if (!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+    var p = n.parentElement; if (!p || p.closest("script,style,svg,button,select")) return NodeFilter.FILTER_REJECT;
+    return NodeFilter.FILTER_ACCEPT; } });
+  var nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(function (n) {
+    var text = n.nodeValue, m, last = 0, frag = null; re.lastIndex = 0;
+    while ((m = re.exec(text))) {
+      frag = frag || document.createDocumentFragment();
+      frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var mk = document.createElement("mark"); mk.textContent = m[0]; frag.appendChild(mk); marks.push(mk);
+      last = m.index + m[0].length;
+    }
+    if (frag) { frag.appendChild(document.createTextNode(text.slice(last))); n.parentNode.replaceChild(frag, n); }
+  });
+  $("#qcnt").textContent = marks.length ? "0/" + marks.length : "None";
+  if (marks.length) go(0);
+}
+function go(i) {
+  if (!marks.length) return;
+  if (cur >= 0 && marks[cur]) marks[cur].classList.remove("cur");
+  cur = (i + marks.length) % marks.length;
+  var m = marks[cur]; m.classList.add("cur");
+  m.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
+  $("#qcnt").textContent = (cur + 1) + "/" + marks.length;
+}
+var qIn = $("#q");
+qIn.addEventListener("input", function () { clearTimeout(qTimer); qTimer = setTimeout(function () { doSearch(qIn.value); }, 250); });
+qIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); if (!marks.length) doSearch(qIn.value); else go(cur + (e.shiftKey ? -1 : 1)); } });
+$("#qnext").addEventListener("click", function () { go(cur + 1); });
+$("#qprev").addEventListener("click", function () { go(cur - 1); });
+document.addEventListener("keydown", function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); qIn.focus(); qIn.select(); }
+});
+
+/* restore the highlight choice last: it dims rows built above */
+setMe(store.get("me", "") || "");
+/* restore the highlight choice last: it dims rows built above */
+setMe(store.get("me", "") || "");
+})();
+</script>
+</body>
+</html>
