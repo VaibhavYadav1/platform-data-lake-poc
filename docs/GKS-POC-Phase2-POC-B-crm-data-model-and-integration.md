@@ -1172,6 +1172,206 @@ Dev 5 needs the following before tenant enrichment can be completed:
 
 The work can be developed in parallel, but the final model cannot be completed until these dependencies are available.
 
+## 15.4 Detailed task breakdown (B1–B10)
+
+Each block below expands one row of the table in 15.1. Owners, days, dependencies and completion conditions are the approved values; sub-steps are drawn from the sections referenced in each block.
+
+### B1 – CRM export specification and type codes
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 5 / day 1–2 |
+| Depends on | None (part of task 0.7) |
+| Blocks | B2, B6 |
+| Detail sections | 5.2, 5.3, 7.1 |
+
+**Sub-steps**
+1. Define the columns, types and meaning of `account.csv`, `store.csv` and `work_order.csv`.
+2. Record the source-data rules: accounts are never deleted (they become `Inactive`), stores carry `account_id`, `g2_store_id` is required.
+3. Define the four known customer type codes (`100000000`–`100000003`) and the `UNKNOWN` fallback.
+4. Define `export_ts` and `updated_at` behaviour.
+5. Define the folder layout `crm/export_ts=<timestamp>/` and the `manifest.json` structure (file name, size, MD5; written last).
+6. Confirm or reject the proposed ID patterns and optional fields listed in section 21.
+
+**Output:** CRM export specification in `specs.md`.  
+**Done when:** the specification is in `specs.md`.
+
+### B2 – CRM export simulator
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 3 / day 3–4 |
+| Depends on | 0.6, B1 |
+| Blocks | B3 |
+| Detail sections | 10, 5.2, 5.3 |
+
+**Sub-steps**
+1. Generate an hourly snapshot folder with `account.csv`, `store.csv` and `work_order.csv`.
+2. Generate account type changes and status changes between snapshots.
+3. Plant at least one unknown customer type code.
+4. Implement `--big-change` so that 60% of accounts change (used by DQ42 and AT-21).
+5. Compute file sizes and MD5 checksums and write `manifest.json` last.
+
+**Output:** CRM export writer in the simulator; export folders in GCS.  
+**Done when:** an export folder appears every hour with a complete manifest.
+
+### B3 – CRM loader (`poc-crm-loader`)
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 3 / day 4–5 |
+| Depends on | B2 |
+| Blocks | B4, B5 |
+| Detail sections | 11, 6.1 |
+
+**Sub-steps**
+1. Create the Python Cloud Run job in `loaders/crm/`.
+2. List `crm/export_ts=*/manifest.json`.
+3. Skip folders already `LOADED` in `raw_crm.load_log`; stop at the first `HELD` folder.
+4. Process new folders oldest first.
+5. Validate every file in the manifest (present, size, MD5), reusing the check from `upload-file-validator-data-lake-poc`.
+6. Load each CSV into its landing table with `WRITE_APPEND`, an explicit schema and `skip_leading_rows=1`.
+7. On any file failure, delete that export's rows from the landing tables, mark the folder `FAILED`, and leave it for retry.
+8. Write the `load_log` row (folder, files, row counts, status, processing time).
+9. Configure the `dev` micro-batch to start the loader and `int` to skip it (`run_crm_loader = false`).
+
+**Output:** `poc-crm-loader` job, `raw_crm` landing tables, `raw_crm.load_log`.  
+**Done when:** running the loader twice loads nothing the second time.
+
+### B4 – Staging and intermediate watermark models
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 3 / day 5–6 |
+| Depends on | B3, 0.4 |
+| Blocks | B9 (and B6 final wiring) |
+| Detail sections | 6.2, 6.3, 14.1, 16.2 |
+
+**Sub-steps**
+1. Create `stg_crm__account`, `stg_crm__store`, `stg_crm__work_order` with typing.
+2. In `stg_crm__account`, replace contact name and email with `primary_contact_token` and drop the originals.
+3. Create `int_crm__account`, `int_crm__store`, `int_crm__work_order` as incremental `merge` models on their unique keys with an `updated_at` watermark.
+4. Keep the latest version per key using `row_number()` over `export_ts desc, updated_at desc`.
+5. Test equal-timestamp and late-arriving records against the watermark.
+6. Verify the re-run produces no duplicates.
+
+**Output:** three `stg_crm__*` and three `int_crm__*` models.  
+**Done when:** AT-20 passes (re-run loads nothing; five account changes change exactly five rows).
+
+### B5 – Change-size guard and approval command
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 3 / day 6–7 |
+| Depends on | B3 |
+| Blocks | AT-21 |
+| Detail sections | 12, 13.6, 16.3 |
+
+**Sub-steps**
+1. Compare the current `account.csv` with the previous successfully loaded export: new `(account_id, updated_at)` pairs plus disappeared accounts, divided by rows in the previous export.
+2. Hold the export when the ratio is greater than 0.5: status `HELD`, nothing loaded, later exports wait.
+3. Log the structured event `crm_guard_tripped` and connect it to the E7 alert policy (email within five minutes).
+4. Add the approve command (`poc-crm-loader --approve export_ts=<timestamp>`) that releases a held export.
+5. Unit tests: 0% load, 49% load, 51% hold, first-ever export load, 60% hold and alert.
+
+**Output:** guard logic and approval command in the loader.  
+**Done when:** AT-21 passes.
+
+### B6 – Customer type seed, macro and `dim_account`
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 5 / day 3–4 |
+| Depends on | B1 (B4 may be stubbed) |
+| Blocks | B7, B8 |
+| Detail sections | 6.4, 7, 13.2 |
+
+**Sub-steps**
+1. Create `seeds/map_customer_type.csv` with the four type codes.
+2. Create the `is_customer()` macro (type `CUSTOMER` and status `Active`).
+3. Build `dim_account` with `customer_type_code`, `customer_type_enum`, `customer_type_name`, `is_customer`, `tenant_id` (top-level account ID), `primary_contact_token` and lineage columns.
+4. Map unknown codes to `UNKNOWN` with `is_customer = false` and raise DQ36.
+5. Add `scripts/ci/check_single_definition.py` so `'CUSTOMER'` and `100000000` appear only in the seed and macro.
+6. Add dbt tests for the required fields and the customer rule.
+
+**Output:** seed, macro, `dim_account`, CI script.  
+**Done when:** tests pass and `dim_account` has `customer_type_enum`, `customer_type_name`, `is_customer` and `tenant_id`.
+
+### B7 – Tenant assignment and store enrichment
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 5 / day 4–5 |
+| Depends on | B6, C2 |
+| Blocks | B8, tenant fields on B9 |
+| Detail sections | 8, 13.3 |
+
+**Sub-steps**
+1. Match G2 stores from `raw_g2` to active CRM stores in `int_crm__store` on `g2_store_id`.
+2. Resolve the CRM `account_id` in `int_crm__account` and follow `parent_account_id` to the top-level account.
+3. Set `tenant_id` to the top-level account ID and `is_customer_store` using the shared customer definition.
+4. For stores with no active CRM store record, set `tenant_id = NULL`, `is_customer_store = false` and raise DQ37.
+5. Publish `int_store__tenant`; confirm the proposed `hierarchy_depth` and `tenant_reason` columns.
+6. Add `tenant_id` and `is_customer_store` to the POC C `dim_store`.
+7. Agree handling of missing parents, hierarchy loops and multiple active matches (proposed DQ45, DQ46).
+
+**Output:** `int_store__tenant`; enriched `dim_store`.  
+**Done when:** every store has a tenant or is listed by DQ37.
+
+### B8 – AT-19 checks
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 5 / day 5–6 |
+| Depends on | B6, B7 |
+| Blocks | Phase 2 sign-off; POC D isolation proof |
+| Detail sections | 14.4, 16.1 |
+
+**Sub-steps**
+1. Test that every account with `is_customer = true` has type `CUSTOMER` and status `Active`.
+2. Test that every tenant in `map_tenant_access` is a customer account.
+3. Run `scripts/ci/check_single_definition.py`.
+4. Plant a vendor account linked to two stores and confirm both have `is_customer_store = false`.
+5. Run the POC D security suite, when available, to prove no tenant can see those stores.
+
+**Output:** AT-19 tests.  
+**Done when:** AT-19 passes.
+
+### B9 – `fct_work_order`
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 3 / day 8 |
+| Depends on | B4 (tenant and store fields also need B7) |
+| Blocks | POC C task C10, POC F benchmarks |
+| Detail sections | 9 |
+
+**Sub-steps**
+1. Read `int_crm__work_order`.
+2. Resolve account, CRM store, G2 store and device references; take `tenant_id` and `store_id` from `int_store__tenant`.
+3. Derive `opened_date` and partition the table on it (clustering and `is_open` pending confirmation).
+4. Decide how unknown account, store or device references are kept and flagged (section 9.5, proposed DQ47) before finalizing constraints.
+5. Add tests and lineage columns.
+
+**Output:** `fct_work_order`.  
+**Done when:** built and tested, partitioned on `opened_date`.
+
+### B10 – Type-2 store history snapshot (stretch)
+
+| Item | Detail |
+|---|---|
+| Owner / days | Dev 5 / stretch (no scheduled day) |
+| Depends on | G7 passed |
+| Blocks | Nothing |
+| Detail sections | 2.2 |
+
+**Sub-steps**
+1. Add a dbt snapshot on `dim_store` tracking `tenant_id` and account changes (type 2 history).
+2. Simulate a store moving to another account and run the snapshot.
+
+**Output:** `dim_store` history snapshot.  
+**Done when:** the snapshot shows a store moving account. Optional; do only if time remains after G7.
+
 ---
 
 # 16. Acceptance Tests
