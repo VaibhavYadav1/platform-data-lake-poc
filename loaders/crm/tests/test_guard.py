@@ -58,3 +58,61 @@ def test_md5_hex_from_gcs_base64():
 def test_read_account_pairs():
     data = b"account_id,updated_at\nA1,2026-11-01T00:00:00Z\nA2,\n"
     assert read_account_pairs(data) == {("A1", T0), ("A2", None)}
+
+
+# ---- file and manifest checks -------------------------------------------------------------------------
+
+import pytest  # noqa: E402
+
+from crm_loader import LoaderError, check_csv, manifest_ts  # noqa: E402
+
+TS = datetime(2026, 11, 20, 8, tzinfo=timezone.utc)
+STORE_HEADER = "crm_store_id,account_id,g2_store_id,status,updated_at,export_ts"
+
+
+def store_csv(*rows, header=STORE_HEADER):
+    return ("\n".join([header, *rows]) + "\n").encode()
+
+
+def test_check_csv_counts_rows():
+    data = store_csv("C1,A1,G1,Active,2026-11-01T00:00:00Z,2026-11-20T08:00:00Z",
+                     "C2,A2,G2,Active,2026-11-01T00:00:00Z,2026-11-20T08:00:00Z")
+    assert check_csv("store.csv", data, TS) == 2
+
+
+def test_check_csv_header_only_is_zero_rows():
+    assert check_csv("store.csv", store_csv(), TS) == 0
+
+
+def test_check_csv_rejects_wrong_header():
+    with pytest.raises(LoaderError, match="header"):
+        check_csv("store.csv", store_csv(header="crm_store_id,account_id"), TS)
+
+
+def test_check_csv_rejects_empty_file():
+    with pytest.raises(LoaderError, match="empty file"):
+        check_csv("store.csv", b"", TS)
+
+
+def test_check_csv_rejects_other_exports_rows():
+    data = store_csv("C1,A1,G1,Active,2026-11-01T00:00:00Z,2026-11-20T07:00:00Z")
+    with pytest.raises(LoaderError, match="export_ts"):
+        check_csv("store.csv", data, TS)
+
+
+def test_check_csv_rejects_missing_or_garbled_export_ts():
+    with pytest.raises(LoaderError, match="export_ts"):
+        check_csv("store.csv", store_csv("C1,A1,G1,Active,2026-11-01T00:00:00Z,"), TS)
+    with pytest.raises(LoaderError, match="export_ts"):
+        check_csv("store.csv", store_csv("C1,A1,G1,Active,2026-11-01T00:00:00Z,garbage"), TS)
+
+
+def test_check_csv_rejects_short_row():
+    with pytest.raises(LoaderError, match="values"):
+        check_csv("store.csv", store_csv("C1,A1"), TS)
+
+
+def test_manifest_ts_accepts_folder_and_iso_formats():
+    assert manifest_ts("20261120T080000Z") == TS
+    assert manifest_ts("2026-11-20T08:00:00Z") == TS
+    assert manifest_ts("nonsense") is None

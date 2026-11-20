@@ -7,6 +7,8 @@ Writes <out>/export_ts=<ts>/{account,store,work_order}.csv and manifest.json (wr
   python make_test_exports.py --out DIR --ts 20261120T100000Z --change 0.60         60% change (trips DQ42)
   python make_test_exports.py --out DIR --ts 20261120T110000Z --bad-work-order      account/store load, work_order fails
   python make_test_exports.py --out DIR --ts 20261120T120000Z --bad-md5             manifest checksum is wrong
+  python make_test_exports.py --out DIR --ts 20261120T140000Z --bad-header          store.csv has a wrong header
+  python make_test_exports.py --out DIR --ts 20261120T150000Z --wrong-row-ts        a row carries another export's export_ts
 """
 from __future__ import annotations
 
@@ -26,7 +28,7 @@ def iso(dt: datetime | None) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ") if dt else ""
 
 
-def build(ts: datetime, change: float, bad_work_order: bool) -> dict[str, list[list[str]]]:
+def build(ts: datetime, change: float, bad_work_order: bool, bad_header: bool = False, wrong_row_ts: bool = False) -> dict[str, list[list[str]]]:
     n_changed = round(N_ACCOUNTS * change)
     export = iso(ts)
     accounts = [["account_id", "account_name", "customer_type_code", "status", "parent_account_id",
@@ -48,6 +50,10 @@ def build(ts: datetime, change: float, bad_work_order: bool) -> dict[str, list[l
                        iso(opened), iso(opened + timedelta(hours=3)), iso(opened + timedelta(hours=3)), export])
     if bad_work_order:
         orders.append(["WO999999", "ACC00001", "CST00001", "", "REPAIR", "OPEN", "not-a-timestamp", "", iso(ts), export])
+    if bad_header:
+        stores[0][1] = "acct_id"
+    if wrong_row_ts:
+        stores[1][-1] = iso(ts - timedelta(hours=1))
     return {"account.csv": accounts, "store.csv": stores, "work_order.csv": orders}
 
 
@@ -72,9 +78,11 @@ def main() -> None:
     ap.add_argument("--change", type=float, default=0.0, help="share of accounts whose updated_at changes")
     ap.add_argument("--bad-work-order", action="store_true")
     ap.add_argument("--bad-md5", action="store_true")
+    ap.add_argument("--bad-header", action="store_true")
+    ap.add_argument("--wrong-row-ts", action="store_true")
     args = ap.parse_args()
     ts = datetime.strptime(args.ts, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
-    print(write_folder(args.out, args.ts, build(ts, args.change, args.bad_work_order), args.bad_md5))
+    print(write_folder(args.out, args.ts, build(ts, args.change, args.bad_work_order, args.bad_header, args.wrong_row_ts), args.bad_md5))
 
 
 if __name__ == "__main__":

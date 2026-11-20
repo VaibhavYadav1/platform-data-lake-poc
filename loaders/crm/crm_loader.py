@@ -66,6 +66,17 @@ def folder_ts(folder_name: str) -> datetime:
     return datetime.strptime(folder_name[len(FOLDER_PREFIX):], TS_FORMAT).replace(tzinfo=timezone.utc)
 
 
+def manifest_ts(value: str) -> datetime | None:
+    """The manifest's export_ts, in the folder format (20261120T080000Z) or ISO."""
+    try:
+        return datetime.strptime(value, TS_FORMAT).replace(tzinfo=timezone.utc)
+    except ValueError:
+        try:
+            return parse_ts(value)
+        except ValueError:
+            return None
+
+
 def md5_hex(b64: str) -> str:
     """GCS reports md5 as base64; the manifest uses hex."""
     return base64.b64decode(b64).hex()
@@ -107,13 +118,41 @@ def discover(gcs: storage.Client, bucket: str, prefix: str) -> dict[datetime, di
     return dict(sorted(found.items()))
 
 
-def validate(files: dict[str, storage.Blob]) -> None:
-    """The manifest lists the three files and every listed file is present with the stated size and MD5."""
+def check_csv(name: str, data: bytes, ts: datetime) -> int:
+    """Structure of one export file: header equals the landing table's columns, every row carries the folder's
+    export_ts and has one value per column. Returns the number of data rows (what the load job should load)."""
+    expected = [c.name for c in TABLES[FILE_TABLE[name]].columns]
+    rows = list(csv.reader(io.StringIO(data.decode("utf-8"))))
+    if not rows or rows[0] != expected:
+        raise LoaderError(f"{name}: header {rows[0] if rows else '(empty file)'} is not {expected}")
+    ts_col = expected.index("export_ts")
+    for line, row in enumerate(rows[1:], start=2):
+        if len(row) != len(expected):
+            raise LoaderError(f"{name} line {line}: {len(row)} values, expected {len(expected)}")
+        try:
+            row_ts = parse_ts(row[ts_col])
+        except ValueError:
+            row_ts = None
+        if row_ts != ts:
+            raise LoaderError(f"{name} line {line}: export_ts {row[ts_col]!r} is not the folder's {ts.strftime(TS_FORMAT)}")
+    return len(rows) - 1
+
+
+def validate(files: dict[str, storage.Blob], ts: datetime) -> dict[str, bytes]:
+    """Manifest checks, then file checks. Returns the file contents so the guard need not download them again.
+
+    Manifest: it names this export_ts, lists the three files, and every listed file is present with the stated size
+    and MD5. Files: nothing unlisted sits in the folder, and each CSV passes check_csv."""
     manifest = json.loads(files["manifest.json"].download_as_bytes())
+    if "export_ts" in manifest and manifest_ts(manifest["export_ts"]) != ts:
+        raise LoaderError(f"manifest is for export_ts {manifest['export_ts']}, the folder is {ts.strftime(TS_FORMAT)}")
     listed = {f["name"]: f for f in manifest.get("files", [])}
     missing = set(FILE_TABLE) - set(listed)
     if missing:
         raise LoaderError(f"manifest does not list {sorted(missing)}")
+    unlisted = set(files) - set(listed) - {"manifest.json"}
+    if unlisted:
+        raise LoaderError(f"files in the folder that the manifest does not list: {sorted(unlisted)}")
     for name, entry in listed.items():
         blob = files.get(name)
         if blob is None:
@@ -122,6 +161,7 @@ def validate(files: dict[str, storage.Blob]) -> None:
             raise LoaderError(f"{name}: size {blob.size} does not match manifest {entry['size']}")
         if md5_hex(blob.md5_hash) != entry["md5"].lower():
             raise LoaderError(f"{name}: MD5 does not match manifest")
+    return {name: files[name].download_as_bytes() for name in FILE_TABLE}
 
 
 # ---------------------------------------------------------------- BigQuery ---------------------------------
@@ -208,16 +248,22 @@ def run(bucket: str, prefix: str, project: str, dataset: str, location: str, app
         ratio = None
         rows: dict[str, int] = {}
         try:
-            validate(files)
-            ratio = change_ratio(wh.last_loaded_accounts(states), read_account_pairs(files["account.csv"].download_as_bytes()))
+            contents = validate(files, ts)
+            expected_rows = {n: check_csv(n, data, ts) for n, data in contents.items()}
+            ratio = change_ratio(wh.last_loaded_accounts(states), read_account_pairs(contents["account.csv"]))
             if guard_trips(ratio) and not approved:
                 print(json.dumps({"event": "crm_guard_tripped", "export_ts": name, "change_ratio": round(ratio, 4)}))
                 wh.log(ts, folder, HELD, file_count=3, ratio=ratio,
                        error=f"change ratio {ratio:.2f} is above {THRESHOLD}; run --approve export_ts={name}")
                 print(f"{name}: HELD (change ratio {ratio:.2f}); nothing loaded")
                 break
+            # Duplicate prevention: this export is not LOADED, so any rows already carrying its export_ts are left
+            # over from a run that loaded them and died before logging. Remove them so the load cannot double them.
+            wh.delete_export(ts)
             for fname, table in FILE_TABLE.items():
                 rows[fname] = wh.load_csv(folder + fname, table)
+                if rows[fname] != expected_rows[fname]:
+                    raise LoaderError(f"{fname}: loaded {rows[fname]} rows, the file has {expected_rows[fname]}")
             wh.log(ts, folder, LOADED, file_count=3, rows=rows, ratio=ratio, approved=approved)
             states[ts] = State(LOADED, approved)
             print(f"{name}: LOADED {rows}" + (f" (change ratio {ratio:.2f})" if ratio is not None else " (first export)"))
