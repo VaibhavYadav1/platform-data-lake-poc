@@ -1,0 +1,27 @@
+tables:
+  # dimensions
+  - {name: dim_store,             kind: dim,  tenant_scoped: true}
+  - {name: dim_device,            kind: dim,  tenant_scoped: true}
+  - {name: dim_alert_type,        kind: dim,  tenant_scoped: false}
+  - {name: status,                kind: dim,  tenant_scoped: false}
+  - {name: dim_date,              kind: dim,  tenant_scoped: false}
+  - {name: dim_account,           kind: dim,  tenant_scoped: true}
+  - {name: dim_offender,          kind: dim,  tenant_scoped: true}
+  - {name: dim_wheel,             kind: dim,  tenant_scoped: true}
+  # facts (partitioned; wh requires the partition filter)
+  - {name: fct_alert,             kind: fact, partition_column: alert_date,  tenant_scoped: true}
+  - {name: fct_alert_history,     kind: fact, partition_column: event_date,  tenant_scoped: true}
+  - {name: fct_work_order,        kind: fact, partition_column: opened_date, tenant_scoped: true}
+  - {name: fct_case,              kind: fact, partition_column: case_date,   tenant_scoped: true}
+  - {name: fct_wheel_event,       kind: fact, partition_column: event_date,  tenant_scoped: true}
+  # marts (dbt tables)
+  - {name: mv_incident_health,    kind: mart, tenant_scoped: true}
+  - {name: mv_store_health,       kind: mart, tenant_scoped: true}
+  - {name: mv_current_issues,     kind: mart, tenant_scoped: true}
+  - {name: mv_downtime_interval,  kind: mart, tenant_scoped: true}
+  - {name: mv_alert_trend_weekly, kind: mart, partition_column: week_start, tenant_scoped: true}
+  # security
+  - {name: map_tenant_access,     kind: dim,  tenant_scoped: false, dataset: sec}
+objects:                        # created by publish.py if missing (C11); the dbt versions stay in build for comparison
+  - objects/mv_alert_trend_daily.sql
+  - objects/mv_cart_count_daily.sql

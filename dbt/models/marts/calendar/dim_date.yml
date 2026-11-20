@@ -1,0 +1,54 @@
+version: 2
+models:
+  - name: dim_date
+    description: One row per day, 2024-01-01 to 2027-12-31. Not tenant-scoped. Rebuilt by the daily full load (tag daily).
+    columns:
+      - name: date_day
+        description: "The day; joins to alert_date, event_date, case_date and opened_date"
+        data_type: "date"
+        data_tests: [unique, not_null]
+      - name: year
+        description: "Calendar year"
+        data_type: "int64"
+      - name: quarter
+        description: "1 to 4"
+        data_type: "int64"
+      - name: month
+        description: "1 to 12"
+        data_type: "int64"
+      - name: month_name
+        description: "Month name"
+        data_type: "string"
+      - name: day_of_month
+        description: "1 to 31"
+        data_type: "int64"
+      - name: day_of_week
+        description: "ISO day, 1 is Monday"
+        data_type: "int64"
+      - name: day_name
+        description: "Day name"
+        data_type: "string"
+      - name: iso_year
+        description: "ISO year"
+        data_type: "int64"
+      - name: iso_week
+        description: "ISO week 1 to 53"
+        data_type: "int64"
+      - name: week_start
+        description: "Monday of the ISO week"
+        data_type: "date"
+      - name: is_weekend
+        description: "Saturday or Sunday"
+        data_type: "bool"
+      - name: _source_system
+        description: "Always generated"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

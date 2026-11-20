@@ -1,0 +1,72 @@
+version: 2
+models:
+  - name: fct_case
+    description: One row per loss-prevention case, from its latest event. Duplicated events count once. Incremental merge on case_id.
+    columns:
+      - name: case_id
+        description: "Case key and merge key"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "From dim_store; null for an unknown store"
+        data_type: "string"
+      - name: store_id
+        description: "From g2_store_id; kept even when unknown (DQ44)"
+        data_type: "string"
+        data_tests: [not_null]
+      - name: offender_token
+        description: "From the latest event that has one"
+        data_type: "string"
+      - name: case_status
+        description: OPEN, UNDER_REVIEW or CLOSED
+        data_type: string
+        data_tests:
+          - accepted_values: {values: [OPEN, UNDER_REVIEW, CLOSED]}
+      - name: last_event_type
+        description: "Type of the latest event"
+        data_type: "string"
+      - name: last_event_id
+        description: "The latest event"
+        data_type: "string"
+      - name: opened_at
+        description: "event_ts of CASE_OPENED, or the earliest event"
+        data_type: "timestamp"
+      - name: closed_at
+        description: "event_ts of CASE_CLOSED; null while open"
+        data_type: "timestamp"
+      - name: last_event_at
+        description: "event_ts of the latest event"
+        data_type: "timestamp"
+      - name: case_date
+        description: "DATE of opened_at; partition column"
+        data_type: "date"
+      - name: loss_amount
+        description: "From the latest event that has one"
+        data_type: "float64"
+      - name: items_count
+        description: "From the latest event that has one"
+        data_type: "int64"
+      - name: event_count
+        description: "Distinct events of the case"
+        data_type: "int64"
+      - name: is_open
+        description: "case_status is not CLOSED"
+        data_type: "bool"
+      - name: _dq_status
+        description: "PASS or WARN"
+        data_type: "string"
+      - name: _dq_reasons
+        description: "Checks that flagged the row (DQ44)"
+        data_type: "array<string>"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

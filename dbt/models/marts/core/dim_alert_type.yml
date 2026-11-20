@@ -1,0 +1,59 @@
+version: 2
+models:
+  - name: dim_alert_type
+    description: Kinds of alert with severity and category. Shared by every tenant (not tenant-scoped).
+    columns:
+      - name: alert_type_id
+        description: "Alert type key"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: alert_name
+        description: "Internal name"
+        data_type: "string"
+        data_tests: [unique]
+      - name: alert_description
+        description: "Plain-language description"
+        data_type: "string"
+      - name: customer_alert_name
+        description: "Customer-facing name; used as alert_name on the facts"
+        data_type: "string"
+        data_tests: [unique]
+      - name: category_name
+        description: "Internal category"
+        data_type: "string"
+      - name: customer_category_name
+        description: "Customer category; drives the downtime cause"
+        data_type: "string"
+      - name: severity
+        description: "Sets the default health colour"
+        data_type: "string"
+      - name: device_type
+        description: "Device the alert comes from"
+        data_type: "string"
+      - name: system_type
+        description: "Exit or Containment"
+        data_type: "string"
+      - name: customer_facing
+        description: "Only these count towards store health"
+        data_type: "bool"
+      - name: default_priority
+        description: "P1 to P5"
+        data_type: "string"
+      - name: not_started_next_step_action
+        description: "Action while the alert is Not Started"
+        data_type: "string"
+      - name: is_active
+        description: "In use"
+        data_type: "bool"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

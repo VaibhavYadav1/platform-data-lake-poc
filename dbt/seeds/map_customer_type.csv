@@ -1,0 +1,5 @@
+customer_type_code,customer_type_enum,customer_type_name,counts_as_customer
+100000000,CUSTOMER,Customer,true
+100000001,VENDOR,Vendor,false
+100000002,PARTNER,Partner,false
+100000003,PROSPECT,Prospect,false

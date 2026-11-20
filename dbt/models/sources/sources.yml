@@ -1,0 +1,49 @@
+version: 2
+# NOTE: freshness values follow the entity registry (plan E7); adjust there first.
+sources:
+  - name: raw_g2
+    description: Datastream append-only landing of the simulated G2 database (one row per change).
+    schema: "{{ var('g2_raw_dataset', 'raw_g2') }}"
+    loaded_at_field: "timestamp_millis(datastream_metadata.source_timestamp)"
+    freshness:
+      warn_after: {count: 8, period: minute}
+      error_after: {count: 30, period: minute}
+    tables:
+      - {name: g2_brands}
+      - {name: g2_teams}
+      - {name: g2_statuses}
+      - {name: g2_alert_types}
+      - {name: g2_stores}
+      - {name: g2_device_locations}
+      - {name: g2_users}
+      - {name: g2_alert_incidents}
+      - {name: g2_alert_history}
+      - {name: g2_store_access}
+      - {name: g2_heartbeat}
+
+  - name: raw_crm
+    schema: "{{ var('crm_raw_dataset', 'raw_crm') }}"
+    tables:
+      - name: account_landing
+        loaded_at_field: export_ts
+        freshness: {warn_after: {count: 75, period: minute}, error_after: {count: 180, period: minute}}   # DQ40
+      - {name: store_landing}
+      - {name: work_order_landing}
+      - {name: load_log}
+
+  - name: raw_lpos
+    schema: "{{ var('lpos_raw_dataset', 'raw_lpos') }}"
+    tables:
+      - name: case_event
+        loaded_at_field: publish_time
+        freshness: {warn_after: {count: 5, period: minute}, error_after: {count: 30, period: minute}}
+
+  - name: sim_g2_datalake
+    database: "{{ var('g2dl_project') }}"
+    schema: "{{ var('g2dl_dataset', 'sim_g2_datalake') }}"
+    tables:
+      - {name: wheel}
+      - name: wheel_event
+        loaded_at_field: _loaded_at
+        freshness: {warn_after: {count: 30, period: minute}, error_after: {count: 90, period: minute}}
+      - {name: derived_alert}

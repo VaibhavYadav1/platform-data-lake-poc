@@ -1,0 +1,69 @@
+version: 2
+models:
+  - name: dim_device
+    description: One row per device at its current store, with the store's hierarchy and tenant. A moved device follows its new store.
+    columns:
+      - name: device_id
+        description: "Device key"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "Tenant from the store"
+        data_type: "string"
+      - name: store_id
+        description: Current store
+        data_type: string
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_store'), field: store_id, config: {severity: warn}}
+      - name: installed_location
+        description: "Door name"
+        data_type: "string"
+      - name: device_type
+        description: "Door Manager, Camera, Cellular Router, Central Transmitter or POE Switch"
+        data_type: "string"
+      - name: main_door_indicator
+        description: "Protects a main exit"
+        data_type: "bool"
+      - name: location_class
+        description: "MAIN_DOOR or OTHER"
+        data_type: "string"
+      - name: brand
+        description: "Brand name from dim_store"
+        data_type: "string"
+      - name: ultimate_parent
+        description: "Company from dim_store"
+        data_type: "string"
+      - name: level_1
+        description: "Region"
+        data_type: "string"
+      - name: level_2
+        description: "Division"
+        data_type: "string"
+      - name: level_3
+        description: "District"
+        data_type: "string"
+      - name: level_4
+        description: "Spare"
+        data_type: "string"
+      - name: level_5
+        description: "Spare"
+        data_type: "string"
+      - name: level_6
+        description: "Spare"
+        data_type: "string"
+      - name: level_7
+        description: "Spare"
+        data_type: "string"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

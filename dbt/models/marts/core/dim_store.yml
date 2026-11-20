@@ -1,0 +1,91 @@
+version: 2
+models:
+  - name: dim_store
+    description: One row per G2 store with brand folded in, the hierarchy and the tenant assignment.
+    columns:
+      - name: store_id
+        description: "Store key"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "Top-level CRM account; null means internal-only (DQ37)"
+        data_type: "string"
+      - name: is_customer_store
+        description: "The store's account is a customer (is_customer macro)"
+        data_type: "bool"
+        data_tests: [not_null]
+      - name: store_name
+        description: "Brand plus store number (not personal data)"
+        data_type: "string"
+      - name: store_number
+        description: "Digits of the store key"
+        data_type: "string"
+      - name: brand_id
+        description: "Brand of the store"
+        data_type: "string"
+      - name: brand
+        description: "Brand name"
+        data_type: "string"
+      - name: brand_is_active
+        description: "Folded in from the brand"
+        data_type: "bool"
+      - name: ultimate_parent
+        description: "Company that owns the brand"
+        data_type: "string"
+      - name: country
+        description: "ISO country code"
+        data_type: "string"
+      - name: state
+        description: "State or province"
+        data_type: "string"
+      - name: city
+        description: "Store city"
+        data_type: "string"
+      - name: region
+        description: "Region"
+        data_type: "string"
+      - name: department
+        description: "Division"
+        data_type: "string"
+      - name: district
+        description: "District code"
+        data_type: "string"
+      - name: level_1
+        description: "Region"
+        data_type: "string"
+      - name: level_2
+        description: "Division"
+        data_type: "string"
+      - name: level_3
+        description: "District"
+        data_type: "string"
+      - name: level_4
+        description: "Spare"
+        data_type: "string"
+      - name: level_5
+        description: "Spare"
+        data_type: "string"
+      - name: level_6
+        description: "Spare"
+        data_type: "string"
+      - name: level_7
+        description: "Spare"
+        data_type: "string"
+      - name: is_active
+        description: "Inactive stores get no store-health row"
+        data_type: "bool"
+      - name: hierarchy_complete
+        description: "Country, company, region, division and district all present"
+        data_type: "bool"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

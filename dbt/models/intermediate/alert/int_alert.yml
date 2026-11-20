@@ -1,0 +1,27 @@
+version: 2
+models:
+  - name: int_alert__validated
+    description: Incidents with _dq_status (PASS, WARN, QUARANTINE) and _dq_reasons (DQ33, DQ34, DQ38 are critical).
+    columns:
+      - name: incident_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: _dq_status
+        description: PASS, WARN or QUARANTINE
+        data_tests:
+          - not_null
+          - accepted_values: {values: [PASS, WARN, QUARANTINE]}
+      - name: _dq_reasons
+        description: "Ids of every failed check"
+  - name: quarantine_alert
+    description: Incidents kept out of fct_alert, with the reasons. Nothing is dropped silently.
+    columns:
+      - name: incident_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: _dq_status
+        description: Always QUARANTINE
+        data_tests:
+          - accepted_values: {values: [QUARANTINE]}
+      - name: _dq_reasons
+        description: "DQ33, DQ34 and or DQ38"

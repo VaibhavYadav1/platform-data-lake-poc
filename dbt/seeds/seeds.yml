@@ -1,0 +1,63 @@
+version: 2
+seeds:
+  - name: map_customer_type
+    description: CRM customer type code to enum. With the is_customer macro, the only place that decides who is a customer.
+    config: {column_types: {customer_type_code: string}}
+    columns:
+      - name: customer_type_code
+        description: "CRM option-set code"
+        data_tests: [unique, not_null]
+      - name: customer_type_enum
+        description: "Stable enum used in code"
+        data_tests: [unique, not_null]
+      - name: customer_type_name
+        description: "Display name"
+      - name: counts_as_customer
+        description: "Whether this type is a customer"
+
+  - name: map_store_health_rule
+    description: Colour an open alert gives its store. * means any. Most specific rule wins (alert type, priority, location). Wording columns are placeholders until specs.md fixes them.
+    columns:
+      - name: rule_id
+        description: "R01 to R13"
+        data_tests: [unique, not_null]
+      - name: alert_type_id
+        description: "Alert type or *"
+        data_tests: [not_null]
+      - name: priority
+        description: "P1 to P5 or *"
+        data_tests: [not_null]
+      - name: location_class
+        description: "MAIN_DOOR, OTHER or *"
+        data_tests: [not_null]
+      - name: status_color
+        description: RED, YELLOW or GREEN
+        data_tests:
+          - accepted_values: {values: [RED, YELLOW, GREEN]}
+      - name: display_label
+        description: "Short label"
+      - name: description
+        description: "Why the store has this colour"
+      - name: recommended_action
+        description: "What to do"
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [alert_type_id, priority, location_class]}
+
+  - name: golden_store_health
+    description: Expected colour and reason for scenario stores at each checkpoint (AT-26b). Empty until Dev 5 supplies scenarios.
+    config: {column_types: {scenario_id: string, store_id: string, after_step: string, expected_status_color: string, expected_status_reason: string, expected_driving_rule_id: string, description: string}}
+    columns:
+      - name: scenario_id
+        description: "G01 and so on"
+      - name: store_id
+        description: "Scenario store"
+      - name: after_step
+        description: "baseline, batch-1, batch-2 or batch-3"
+      - name: expected_status_color
+        description: "RED, YELLOW or GREEN"
+      - name: expected_status_reason
+        description: "Expected status_reason"
+      - name: expected_driving_rule_id
+        description: "Expected driving rule; empty for GREEN"
+      - name: description
+        description: "What the scenario shows"

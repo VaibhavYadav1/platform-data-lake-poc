@@ -1,0 +1,14 @@
+rule_id,alert_type_id,priority,location_class,status_color,display_label,description,recommended_action
+R01,AT01,*,MAIN_DOOR,RED,Action required,Protection is offline at a main door,Dispatch field service to the main door
+R02,AT01,*,OTHER,YELLOW,Degraded,Protection is offline at a secondary door,Schedule a service visit
+R03,AT02,*,MAIN_DOOR,RED,Action required,A critical alert is open at a main door,Dispatch field service to the main door
+R04,AT02,*,OTHER,YELLOW,Degraded,A critical alert is open at a secondary door,Schedule a service visit
+R05,AT03,*,*,RED,Action required,The system is down,Escalate to support immediately
+R06,AT04,P1,*,RED,Action required,A priority 1 alert is open,Escalate to support immediately
+R07,AT04,*,*,YELLOW,Degraded,A lower priority alert is open,Review the alert
+R08,AT05,*,MAIN_DOOR,RED,Action required,A connectivity alert is open at a main door,Check power and network at the store
+R09,AT05,*,OTHER,YELLOW,Degraded,A connectivity alert is open at a secondary door,Check power and network at the store
+R10,AT06,*,*,YELLOW,Degraded,A maintenance alert is open,Plan routine maintenance
+R11,AT07,*,*,YELLOW,Degraded,A store activity alert is open,Review store activity
+R12,AT08,*,*,GREEN,Informational,An informational alert is open,No action needed
+R13,AT09,*,*,RED,Action required,A severe alert is open,Escalate to support immediately

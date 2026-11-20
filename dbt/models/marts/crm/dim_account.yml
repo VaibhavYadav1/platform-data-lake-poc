@@ -1,0 +1,53 @@
+version: 2
+models:
+  - name: dim_account
+    description: CRM accounts with the customer classification. is_customer is the one definition of a customer (type CUSTOMER and status Active).
+    columns:
+      - name: account_key
+        description: "Surrogate key"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: account_id
+        description: "CRM account id"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "Top-level account id; null when the hierarchy is broken (DQ45)"
+        data_type: "string"
+      - name: account_name
+        description: "Company name"
+        data_type: "string"
+      - name: customer_type_code
+        description: "Raw CRM type code"
+        data_type: "string"
+      - name: customer_type_enum
+        description: "Type enum, or UNKNOWN for an unknown code (DQ36)"
+        data_type: "string"
+      - name: customer_type_name
+        description: "Type display name"
+        data_type: "string"
+      - name: is_customer
+        description: "Single-definition customer flag"
+        data_type: "bool"
+        data_tests: [not_null]
+      - name: status
+        description: "Active or Inactive"
+        data_type: "string"
+      - name: parent_account_id
+        description: "Parent account; null means top-level"
+        data_type: "string"
+      - name: primary_contact_token
+        description: "Tokenised contact; no name or email"
+        data_type: "string"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

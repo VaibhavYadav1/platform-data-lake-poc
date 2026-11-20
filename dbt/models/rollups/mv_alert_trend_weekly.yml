@@ -1,0 +1,82 @@
+version: 2
+models:
+  - name: mv_alert_trend_weekly
+    description: Store by alert type by ISO week (Monday start), with the change from the previous week that has data.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [week_start, store_id, alert_type_id]}
+    columns:
+      - name: week_start
+        description: "Monday of the ISO week; partition column"
+        data_type: "date"
+        data_tests: [not_null]
+      - name: store_id
+        description: "Store"
+        data_type: "string"
+        data_tests: [not_null]
+      - name: alert_type_id
+        description: "Alert type"
+        data_type: "string"
+        data_tests: [not_null]
+      - name: tenant_id
+        description: "From dim_store"
+        data_type: "string"
+      - name: alert_name
+        description: "Customer alert name"
+        data_type: "string"
+      - name: incident_count
+        description: "Incidents that week"
+        data_type: "int64"
+      - name: distinct_alert_count
+        description: "Distinct alert_id that week"
+        data_type: "int64"
+      - name: prev_week_incident_count
+        description: "LAG over week_start"
+        data_type: "int64"
+      - name: week_over_week_change
+        description: "incident_count minus prev_week_incident_count"
+        data_type: "int64"
+      - name: snapshot_ts
+        description: "The run's as-of time"
+        data_type: "timestamp"
+      - name: brand
+        description: "Brand name"
+        data_type: "string"
+      - name: ultimate_parent
+        description: "Company"
+        data_type: "string"
+      - name: country
+        description: "ISO country code"
+        data_type: "string"
+      - name: level_1
+        description: "Region"
+        data_type: "string"
+      - name: level_2
+        description: "Division"
+        data_type: "string"
+      - name: level_3
+        description: "District"
+        data_type: "string"
+      - name: level_4
+        description: "Spare"
+        data_type: "string"
+      - name: level_5
+        description: "Spare"
+        data_type: "string"
+      - name: level_6
+        description: "Spare"
+        data_type: "string"
+      - name: level_7
+        description: "Spare"
+        data_type: "string"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

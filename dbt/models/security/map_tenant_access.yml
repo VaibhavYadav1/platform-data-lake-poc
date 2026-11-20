@@ -1,0 +1,17 @@
+version: 2
+models:
+  - name: map_tenant_access
+    description: One row per (principal, tenant). Published to sec_{env}; read only by the row access policies.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [principal, tenant_id]}
+    columns:
+      - name: principal
+        description: "Login email exactly as SESSION_USER() returns it (the one exception to tokens)"
+        data_type: "string"
+        data_tests: [not_null]
+      - name: tenant_id
+        description: Tenant the principal may read; always a customer account
+        data_type: string
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_account'), field: account_id}
