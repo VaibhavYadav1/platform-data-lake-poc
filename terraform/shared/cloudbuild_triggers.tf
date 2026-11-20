@@ -23,6 +23,9 @@ resource "google_cloudbuild_trigger" "pr_checks" {
   description = "E1: Terraform, pytest, rule checks and dbt CI on every pull request to main"
   filename    = "cloudbuild/pr.yaml"
 
+  service_account = google_service_account.cloudbuild.id
+  depends_on      = [google_project_iam_member.cloudbuild]
+
   github {
     owner = var.github_owner
     name  = var.github_repo
