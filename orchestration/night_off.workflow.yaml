@@ -1,0 +1,182 @@
+# poc-night-off (E8): stop the pipeline in the evening to save cost.
+#
+# Order matters:
+#   1. Pause the scheduler jobs, so nothing starts new work.
+#   2. Pause the Datastream stream.
+#   3. Stop Cloud SQL.
+# The stream pauses BEFORE the database stops. A stream left paused while the database runs
+# keeps the replication slot's write-ahead log, and the disk fills. If step 2 or 3 fails the
+# workflow fails (so the "failed poc-* workflow" alert fires) and never goes on to stop the
+# database behind a stream that is still running.
+#
+# Safe to re-run: pausing something already paused is a no-op.
+#
+# Run by hand:  gcloud workflows run poc-night-off --location us-central1 --data='{}'
+# Arguments (all optional, defaults below; the Cloud Scheduler job passes them from Terraform):
+#   location, sql_instance, stream_id, scheduler_jobs (list of job ids), wait_seconds, wait_polls
+main:
+  params: [args]
+  steps:
+    - init_args:
+        assign:
+          - cfg: {}
+    - merge_args:
+        switch:
+          - condition: ${args != null}
+            assign:
+              - cfg: ${args}
+    - init:
+        assign:
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - location: ${default(map.get(cfg, "location"), "us-central1")}
+          - sql_instance: ${default(map.get(cfg, "sql_instance"), "poc-ops-db")}
+          - stream_id: ${default(map.get(cfg, "stream_id"), "poc-cdc-stream")}
+          - scheduler_jobs: ${default(map.get(cfg, "scheduler_jobs"), ["poc-simulator", "poc-micro-batch-dev", "poc-micro-batch-int", "poc-watchdog"])}
+          - wait_seconds: ${default(map.get(cfg, "wait_seconds"), 15)}
+          - wait_polls: ${default(map.get(cfg, "wait_polls"), 40)}
+          - stream_name: ${"projects/" + project_id + "/locations/" + location + "/streams/" + stream_id}
+
+    # ---- 1. Pause the scheduler jobs --------------------------------------------------------
+    - pause_scheduler_jobs:
+        for:
+          value: job
+          in: ${scheduler_jobs}
+          steps:
+            - pause_one_job:
+                try:
+                  call: googleapis.cloudscheduler.v1.projects.locations.jobs.pause
+                  args:
+                    name: ${"projects/" + project_id + "/locations/" + location + "/jobs/" + job}
+                except:
+                  as: e
+                  steps:
+                    # A job that doesn't exist yet (for example int, before E9) is not an error.
+                    - job_missing_or_fail:
+                        switch:
+                          - condition: ${map.get(e, "code") == 404}
+                            next: warn_missing
+                    - fail_job:
+                        raise: ${e}
+                    - warn_missing:
+                        call: sys.log
+                        args:
+                          severity: WARNING
+                          json: {event: "night_off_job_missing", job: "${job}"}
+                        next: continue
+            - log_job_paused:
+                call: sys.log
+                args:
+                  severity: INFO
+                  json: {event: "night_off_job_paused", job: "${job}"}
+
+    # ---- 2. Pause the Datastream stream, then check it really paused -------------------------
+    # Waits until the stream is PAUSED. On timeout it raises, and Cloud SQL is NOT stopped.
+    - pause_stream:
+        call: set_stream_state
+        args:
+          stream_name: ${stream_name}
+          wanted: "PAUSED"
+          also_ok: []
+          max_polls: ${wait_polls}
+          interval_s: ${wait_seconds}
+    - log_stream_paused:
+        call: sys.log
+        args:
+          severity: INFO
+          json: {event: "night_off_stream_paused", stream: "${stream_id}"}
+
+    # ---- 3. Stop Cloud SQL --------------------------------------------------------------------
+    - stop_sql:
+        call: googleapis.sqladmin.v1.instances.patch
+        args:
+          project: ${project_id}
+          instance: ${sql_instance}
+          body:
+            settings:
+              activationPolicy: "NEVER"
+    - wait_sql_stopped:
+        call: wait_for_sql_state
+        args:
+          project_id: ${project_id}
+          instance: ${sql_instance}
+          wanted: "STOPPED"
+          max_polls: ${wait_polls}
+          interval_s: ${wait_seconds}
+    - log_done:
+        call: sys.log
+        args:
+          severity: INFO
+          json: {event: "night_off_done", sql_instance: "${sql_instance}"}
+    - done:
+        return: "night-off complete"
+
+# Workflows has no Datastream connector, so this calls the REST API. The PATCH starts a
+# long-running operation; the stream's own state tells us when it has finished.
+set_stream_state:
+  params: [stream_name, wanted, also_ok, max_polls, interval_s]
+  steps:
+    - init:
+        assign:
+          - polls: 0
+          - url: ${"https://datastream.googleapis.com/v1/" + stream_name}
+    - patch:
+        call: http.patch
+        args:
+          url: ${url}
+          query:
+            updateMask: "state"
+          body:
+            state: ${wanted}
+          auth:
+            type: OAuth2
+    - poll:
+        call: http.get
+        args:
+          url: ${url}
+          auth:
+            type: OAuth2
+        result: resp
+    - check:
+        switch:
+          - condition: ${resp.body.state == wanted or resp.body.state in also_ok}
+            return: ${resp.body.state}
+          - condition: ${polls >= max_polls}
+            raise: ${"Stream " + stream_name + " is " + resp.body.state + ", expected " + wanted}
+    - wait:
+        call: sys.sleep
+        args:
+          seconds: ${interval_s}
+    - bump:
+        assign:
+          - polls: ${polls + 1}
+    - again:
+        next: poll
+
+# Polls the instance until it reaches the wanted state, or raises after max_polls tries.
+wait_for_sql_state:
+  params: [project_id, instance, wanted, max_polls, interval_s]
+  steps:
+    - init:
+        assign:
+          - polls: 0
+    - poll:
+        call: googleapis.sqladmin.v1.instances.get
+        args:
+          project: ${project_id}
+          instance: ${instance}
+        result: inst
+    - check:
+        switch:
+          - condition: ${inst.state == wanted}
+            return: ${inst.state}
+          - condition: ${polls >= max_polls}
+            raise: ${"Timed out waiting for " + instance + " to be " + wanted + ", last state " + inst.state}
+    - wait:
+        call: sys.sleep
+        args:
+          seconds: ${interval_s}
+    - bump:
+        assign:
+          - polls: ${polls + 1}
+    - again:
+        next: poll
