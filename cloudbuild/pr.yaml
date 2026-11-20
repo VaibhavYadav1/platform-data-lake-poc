@@ -1,0 +1,180 @@
+# E1: checks on every pull request to main. A failing step blocks the merge.
+# CI only plans. It never applies (that is cloudbuild/main.yaml, E2).
+#
+# Trigger: pull requests to main, created in Terraform. It supplies _PR_NUMBER.
+# Run by hand: gcloud builds submit --config cloudbuild/pr.yaml --substitutions=_PR_NUMBER=0 .
+#
+# Steps without a prerequisite yet (int files, dbt project, Dev 1/Dev 5 check scripts) print a
+# "SKIPPED" line and pass, so the check can be required from Day 3. Each skip is removed by
+# its owner's task landing; nothing here needs editing for that.
+
+substitutions:
+  _PR_NUMBER: "0"
+  _TF_IMAGE: hashicorp/terraform:1.17
+  _PY_IMAGE: python:3.12-slim
+  _DBT_LAYERS: "stg prep build dq" # dataset per layer, see generate_schema_name (task 0.4)
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 1500s
+
+steps:
+  # ---------------------------------------------------------------- Terraform
+  - id: tf-fmt
+    name: ${_TF_IMAGE}
+    entrypoint: sh
+    args: [-c, "terraform fmt -check -recursive -diff terraform/"]
+
+  # shared, dev and int plan in parallel: separate directories, separate state.
+  # -lock=false: a plan never writes state, and a PR must not wait on or block an apply.
+  - id: tf-shared
+    name: ${_TF_IMAGE}
+    waitFor: [tf-fmt]
+    dir: terraform/shared
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        terraform init -input=false -backend-config=backend.hcl
+        terraform validate
+        terraform plan -input=false -lock=false -var-file=terraform.tfvars -out=plan.out
+        echo "PLAN shared: $$(terraform show -no-color plan.out | grep -E '^(Plan:|No changes)' | head -1)"
+
+  - id: tf-dev
+    name: ${_TF_IMAGE}
+    waitFor: [tf-fmt]
+    dir: terraform/env
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        terraform init -input=false -backend-config=dev.backend.hcl
+        terraform validate
+        terraform plan -input=false -lock=false -var-file=dev.tfvars -out=plan.out
+        echo "PLAN dev: $$(terraform show -no-color plan.out | grep -E '^(Plan:|No changes)' | head -1)"
+
+  - id: tf-int
+    name: ${_TF_IMAGE}
+    waitFor: [tf-fmt]
+    dir: terraform/env
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f int.tfvars ] || [ ! -f int.backend.hcl ]; then
+          echo "SKIPPED tf-int: int.tfvars / int.backend.hcl not written yet (E9, Day 9)"
+          exit 0
+        fi
+        # A separate copy: dev and int plan at the same time and each needs its own .terraform/
+        rm -rf /tmp/int && cp -r . /tmp/int && cd /tmp/int && rm -rf .terraform plan.out
+        terraform init -input=false -backend-config=int.backend.hcl
+        terraform validate
+        terraform plan -input=false -lock=false -var-file=int.tfvars -out=plan.out
+        echo "PLAN int: $$(terraform show -no-color plan.out | grep -E '^(Plan:|No changes)' | head -1)"
+
+  # ------------------------------------------------------------------- Python
+  # pytest exits 5 when it collects nothing; that is fine until each directory has tests.
+  - id: pytest
+    name: ${_PY_IMAGE}
+    waitFor: ["-"]
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        pip install --quiet --no-cache-dir pytest pyyaml
+        for r in $$(find loaders orchestration/publish apps scripts -name 'requirements*.txt' 2>/dev/null); do
+          pip install --quiet --no-cache-dir -r "$$r"
+        done
+        rc=0
+        python -m pytest loaders/ orchestration/publish/ apps/ scripts/ -q || rc=$$?
+        if [ "$$rc" -eq 5 ]; then echo "pytest: no tests collected yet"; exit 0; fi
+        exit "$$rc"
+
+  # ---------------------------------------------------------------- Rule checks
+  - id: rule-env-diff
+    name: ${_PY_IMAGE}
+    waitFor: ["-"]
+    entrypoint: python
+    args: [scripts/ci/check_env_diff.py]
+
+  - id: rule-model-tests # C1 (Dev 1)
+    name: ${_PY_IMAGE}
+    waitFor: ["-"]
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f scripts/ci/check_model_tests.py ]; then
+          echo "SKIPPED rule-model-tests: scripts/ci/check_model_tests.py not merged yet (C1)"; exit 0
+        fi
+        pip install --quiet --no-cache-dir pyyaml
+        python scripts/ci/check_model_tests.py
+
+  - id: rule-single-definition # B8 (Dev 5)
+    name: ${_PY_IMAGE}
+    waitFor: ["-"]
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f scripts/ci/check_single_definition.py ]; then
+          echo "SKIPPED rule-single-definition: scripts/ci/check_single_definition.py not merged yet (B8)"; exit 0
+        fi
+        pip install --quiet --no-cache-dir pyyaml
+        python scripts/ci/check_single_definition.py
+
+  # ---------------------------------------------------------------------- dbt
+  # Datasets dbt_pr_<n>_<layer>, tables expire after one day. Landing datasets are only read.
+  - id: dbt-datasets
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f dbt/dbt_project.yml ]; then
+          echo "SKIPPED dbt-datasets: dbt/dbt_project.yml not merged yet (0.4)"; exit 0
+        fi
+        for layer in ${_DBT_LAYERS}; do
+          ds="dbt_pr_${_PR_NUMBER}_$${layer}"
+          bq --project_id=$PROJECT_ID mk --dataset --force --location=us-central1 \
+             --default_table_expiration=86400 --label=poc:phase2 "$PROJECT_ID:$${ds}"
+          # --force skips an existing dataset; re-apply expiry on reruns of the same PR
+          bq --project_id=$PROJECT_ID update --default_table_expiration 86400 "$PROJECT_ID:$${ds}"
+        done
+
+  - id: dbt-build
+    name: ${_PY_IMAGE}
+    waitFor: [dbt-datasets, rule-model-tests]
+    dir: dbt
+    entrypoint: sh
+    env:
+      - DBT_PROFILES_DIR=.
+      - PR_NUMBER=${_PR_NUMBER}
+      - GCP_PROJECT=$PROJECT_ID
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f dbt_project.yml ]; then
+          echo "SKIPPED dbt-build: dbt/dbt_project.yml not merged yet (0.4)"; exit 0
+        fi
+        pip install --quiet --no-cache-dir -r requirements.txt
+        dbt deps
+        dbt build --target ci
+
+  # ------------------------------------------------------------------ Summary
+  - id: done
+    name: ${_PY_IMAGE}
+    waitFor: [tf-shared, tf-dev, tf-int, pytest, rule-env-diff, rule-model-tests, rule-single-definition, dbt-build]
+    entrypoint: echo
+    args: ["All PR checks passed for #${_PR_NUMBER}"]
