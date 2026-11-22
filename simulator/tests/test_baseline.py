@@ -14,8 +14,8 @@ VENDOR_SHA256 = "9d9b747d2cd5d76dc9da58301fa363c93e7d83c3ef57ed474ab8c4cade2d3f2
 
 
 def test_vendored_generator_is_unchanged():
-    path = Path(gen.__file__)
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == VENDOR_SHA256, "never edit vendor/ (see vendor/README.md)"
+    content = Path(gen.__file__).read_bytes().replace(b"\r\n", b"\n")  # a Windows checkout may use CRLF
+    assert hashlib.sha256(content).hexdigest() == VENDOR_SHA256, "never edit vendor/ (see vendor/README.md)"
 
 
 def test_rebuilt_batch_matches_the_baseline():
