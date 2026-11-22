@@ -1,0 +1,135 @@
+# poc-watchdog (E7): is the source side alive?
+#
+# Every 5 minutes, ONE cheap query reads two ages:
+#   simulator  the newest heartbeat row of source 'simulator' in raw_g2.g2_heartbeat. The simulator
+#              updates it every tick, so it covers the simulator, Cloud SQL and Datastream together;
+#   case_event the newest raw_lpos.case_event row, looking at the last day only (partition filter).
+# An age over the threshold (8 minutes), or no row at all, logs one line at ERROR with
+# event = watchdog_stale. A log-based metric on that event sends the alert email. Threshold 8 plus
+# the 5-minute interval keeps detection inside the 15-minute promise.
+#
+# The workflow itself only fails if the query fails; that is caught by the "failed poc-* workflow"
+# alert. night-off pauses the scheduler job and morning-on resumes it, so a night with the source
+# stopped does not alert.
+#
+# Run by hand:  gcloud workflows run poc-watchdog --location us-central1 --data='{}'
+# Arguments (all optional): threshold_minutes, raw_g2_dataset, raw_lpos_dataset, heartbeat_source
+main:
+  params: [args]
+  steps:
+    - init_args:
+        assign:
+          - cfg: {}
+    - merge_args:
+        switch:
+          - condition: ${args != null}
+            assign:
+              - cfg: ${args}
+    - init:
+        assign:
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - threshold_minutes: ${default(map.get(cfg, "threshold_minutes"), 8)}
+          - raw_g2: ${default(map.get(cfg, "raw_g2_dataset"), "raw_g2")}
+          - raw_lpos: ${default(map.get(cfg, "raw_lpos_dataset"), "raw_lpos")}
+          - heartbeat_source: ${default(map.get(cfg, "heartbeat_source"), "simulator")}
+          # Workflows limits one expression to 400 characters, so the query is built in pieces.
+          - heartbeat_table: ${"`" + project_id + "." + raw_g2 + ".g2_heartbeat`"}
+          - case_event_table: ${"`" + project_id + "." + raw_lpos + ".case_event`"}
+          - sql_simulator: ${"(SELECT TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(updated_at), SECOND) FROM " + heartbeat_table + " WHERE source = '" + heartbeat_source + "') AS simulator_age_s, "}
+          - sql_case_event: ${"(SELECT TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(publish_time), SECOND) FROM " + case_event_table + " WHERE publish_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)) AS case_event_age_s"}
+          - sql_text: ${"SELECT " + sql_simulator + sql_case_event}
+
+    - run_query:
+        call: googleapis.bigquery.v2.jobs.query
+        args:
+          projectId: ${project_id}
+          body:
+            query: ${sql_text}
+            useLegacySql: false
+            timeoutMs: 30000
+        result: response
+
+    - check_query_finished:
+        switch:
+          - condition: ${default(map.get(response, "jobComplete"), false) != true}
+            raise: "The watchdog query did not finish within 30 seconds"
+
+    - read_ages:
+        assign:
+          # A null value means no row at all: the age is unknown, which counts as stale.
+          - simulator_age: ${response.rows[0].f[0].v}
+          - case_event_age: ${response.rows[0].f[1].v}
+
+    - judge_simulator:
+        call: judge
+        args:
+          source_name: "simulator"
+          age_seconds: ${simulator_age}
+          threshold_minutes: ${threshold_minutes}
+        result: simulator_verdict
+    - judge_case_event:
+        call: judge
+        args:
+          source_name: "case_event"
+          age_seconds: ${case_event_age}
+          threshold_minutes: ${threshold_minutes}
+        result: case_event_verdict
+
+    - done:
+        return:
+          threshold_minutes: ${threshold_minutes}
+          simulator: ${simulator_verdict}
+          case_event: ${case_event_verdict}
+
+
+# =================================================================
+# Subworkflow: compare one age with the threshold, log it, and say what it found.
+# ERROR with event watchdog_stale is the line the alert policy counts; INFO otherwise.
+# =================================================================
+judge:
+  params: [source_name, age_seconds, threshold_minutes]
+  steps:
+    - unknown_age:
+        switch:
+          - condition: ${age_seconds == null}
+            steps:
+              - log_no_data:
+                  call: sys.log
+                  args:
+                    severity: ERROR
+                    json:
+                      event: "watchdog_stale"
+                      source: ${source_name}
+                      reason: "no rows"
+                      threshold_minutes: ${threshold_minutes}
+              - return_no_data:
+                  return: "stale: no rows"
+    - measure:
+        assign:
+          - age_minutes: ${double(age_seconds) / 60}
+    - compare:
+        switch:
+          - condition: ${age_minutes > threshold_minutes}
+            steps:
+              - log_stale:
+                  call: sys.log
+                  args:
+                    severity: ERROR
+                    json:
+                      event: "watchdog_stale"
+                      source: ${source_name}
+                      age_minutes: ${age_minutes}
+                      threshold_minutes: ${threshold_minutes}
+              - return_stale:
+                  return: "stale"
+    - log_ok:
+        call: sys.log
+        args:
+          severity: INFO
+          json:
+            event: "watchdog_ok"
+            source: ${source_name}
+            age_minutes: ${age_minutes}
+            threshold_minutes: ${threshold_minutes}
+    - return_ok:
+        return: "ok"

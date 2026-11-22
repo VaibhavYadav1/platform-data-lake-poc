@@ -75,3 +75,11 @@ variable "manage_orchestrator_iam" {
   type        = bool
   default     = true
 }
+
+# ---- E7: watchdog ---------------------------------------------------------------------------
+
+variable "watchdog_interval_minutes" {
+  description = "How often poc-watchdog runs. Interval 5 plus a threshold of 8 minutes keeps detection inside the 15-minute promise."
+  type        = number
+  default     = 5
+}

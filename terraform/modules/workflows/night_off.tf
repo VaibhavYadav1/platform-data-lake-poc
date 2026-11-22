@@ -104,6 +104,8 @@ resource "google_project_iam_member" "orchestrator_e8" {
     # E4 micro-batch: run Cloud Run jobs with container arguments, and write pipeline_run_steps.
     "roles/run.developer",
     "roles/bigquery.dataEditor",
+    # E7 watchdog: run its one query against raw_g2 and raw_lpos.
+    "roles/bigquery.jobUser",
   ]) : toset([])
 
   project = var.project_id

@@ -1,0 +1,8 @@
+entity,source_system,measured_on,ts_column,sync_mode,promise_minutes,checked_by,owner,partition_column
+alert,g2,wh.fct_alert,_source_updated_at,cdc,20,micro-batch,Dev 3,alert_date
+alert_history,g2,wh.fct_alert_history,_source_updated_at,cdc,20,micro-batch,Dev 3,event_date
+case_raw,lpos,raw_lpos.case_event,publish_time,stream,5,micro-batch,Dev 4,
+case,lpos,wh.fct_case,_source_updated_at,stream,20,micro-batch,Dev 4,case_date
+crm_export,crm,raw_crm.account_landing,export_ts,batch,75,micro-batch,Dev 3,
+wheel_event,g2_datalake,wh.fct_wheel_event,_source_updated_at,batch,30,micro-batch,Dev 1,event_date
+heartbeat,g2,raw_g2.g2_heartbeat,updated_at,cdc,8,watchdog,Dev 4,
