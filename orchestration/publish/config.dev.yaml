@@ -1,0 +1,16 @@
+# publish.py settings for dev. int gets its own file in E9; only this file differs between them.
+project: gks-datalake-poc2-dev
+environment: dev
+
+# Row access policy grantees (D4, Dev 2). A principal named in no policy sees zero rows, so the
+# writer must be in all_rows_principals or its own checks read nothing.
+all_rows_principals:
+  - serviceAccount:sa-dwh-writer-dev@gks-datalake-poc2-dev.iam.gserviceaccount.com
+  # - user:<internal analyst>   (add when D4 settles who may see every tenant)
+
+# Every tenant user and per-tenant application identity. Empty until D2/D4 name them; publish.py
+# stops with a clear message while it is empty and tenant-scoped tables exist.
+tenant_principals: []
+
+# Fail when tenant-scoped tables exist but no policy SQL does. Keep true.
+require_policies: true

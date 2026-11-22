@@ -1,0 +1,35 @@
+# Which tables publish.py copies from build_<env> into wh_<env> (or sec_<env>), and how.
+# publish.py creates each missing table with CREATE TABLE IF NOT EXISTS ... LIKE build_<env>.<name>,
+# so a table listed here must already exist in build_<env> (dbt has built it), or the publish stops.
+#
+# kind: fact       replace only the partitions this dbt run changed (needs partition_column)
+# kind: dim|mart   replace the whole table on every publish
+# tenant_scoped    true = the table carries tenant_id and gets both row access policies (D4)
+# dataset          wh (default) or sec
+#
+# Plan: GKS-POC-Phase2-detailed-plan.md, C11 step 2 and the table-name list near line 1820.
+tables:
+  # Dimensions
+  - {name: dim_account,    kind: dim, tenant_scoped: true}
+  - {name: dim_store,      kind: dim, tenant_scoped: true}
+  - {name: dim_device,     kind: dim, tenant_scoped: true}
+  - {name: dim_alert_type, kind: dim, tenant_scoped: false}   # no tenant_id; every reader may read it
+  - {name: dim_status,     kind: dim, tenant_scoped: false}   # dbt seed "status"; no tenant_id
+  - {name: dim_date,       kind: dim, tenant_scoped: false}   # no tenant_id
+
+  # Facts: replaced per changed date
+  - {name: fct_alert,         kind: fact, partition_column: alert_date, tenant_scoped: true}
+  - {name: fct_alert_history, kind: fact, partition_column: event_date, tenant_scoped: true}
+
+  # Add each of these when its dbt model exists in build_<env>:
+  # - {name: map_tenant_access, kind: dim,  tenant_scoped: false, dataset: sec}   # D3, Dev 2
+  # - {name: fct_work_order,    kind: fact, partition_column: opened_date, tenant_scoped: true}   # B9
+  # - {name: fct_case,          kind: fact, partition_column: case_date,   tenant_scoped: true}   # C10
+  # - {name: fct_wheel_event,   kind: fact, partition_column: event_date,  tenant_scoped: true}   # C10
+  # - {name: dim_wheel,         kind: dim,  tenant_scoped: true}                                   # C10
+  # - {name: dim_offender,      kind: dim,  tenant_scoped: true}                                   # C10
+
+# Native materialized views, created by publish.py if missing (C11, Dev 1). Add when the files exist:
+objects: []
+#  - objects/mv_cart_count_daily.sql
+#  - objects/mv_alert_trend_daily.sql
