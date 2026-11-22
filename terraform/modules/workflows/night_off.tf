@@ -31,7 +31,7 @@ resource "google_workflows_workflow" "night_off" {
   name            = "poc-night-off"
   description     = "E8: pause scheduler jobs, pause the Datastream stream, stop Cloud SQL (in that order)"
   service_account = var.orchestrator_service_account_email
-  source_contents = file("${path.module}/../../../orchestration/night_off.workflow.yaml")
+  source_contents = replace(file("${path.module}/../../../orchestration/night_off.workflow.yaml"), "\r\n", "\n")
 
   labels = {
     poc = "phase2"
@@ -44,7 +44,7 @@ resource "google_workflows_workflow" "morning_on" {
   name            = "poc-morning-on"
   description     = "E8: start Cloud SQL, resume the stream and simulator, then micro-batch and watchdog"
   service_account = var.orchestrator_service_account_email
-  source_contents = file("${path.module}/../../../orchestration/morning_on.workflow.yaml")
+  source_contents = replace(file("${path.module}/../../../orchestration/morning_on.workflow.yaml"), "\r\n", "\n")
 
   labels = {
     poc = "phase2"
@@ -101,6 +101,9 @@ resource "google_project_iam_member" "orchestrator_e8" {
     "roles/datastream.admin",     # pause and resume the stream
     "roles/cloudsql.editor",      # stop and start the instance
     "roles/logging.logWriter",
+    # E4 micro-batch: run Cloud Run jobs with container arguments, and write pipeline_run_steps.
+    "roles/run.developer",
+    "roles/bigquery.dataEditor",
   ]) : toset([])
 
   project = var.project_id
