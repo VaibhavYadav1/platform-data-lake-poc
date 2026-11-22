@@ -294,7 +294,7 @@ pre.tree .new{color:var(--green)}
     <div><dt>Project</dt><dd>Store Alert Data Lake, Phase 2</dd></div>
     <div><dt>POC</dt><dd>A: real-time path (change data capture and streaming)</dd></div>
     <div><dt>Based on</dt><dd>Approved plan v2.0 (17 Nov 2026), schema round 2 (18 Nov 2026)</dd></div>
-    <div><dt>Guide date</dt><dd>19 Nov 2026</dd></div>
+    <div><dt>Guide date</dt><dd>19 Nov 2026 · build progress updated 22 Nov 2026 (<a href="#s17-progress">17.0</a>)</dd></div>
     <div><dt>Environment</dt><dd><code>gks-datalake-poc2-dev</code>, <code>us-central1</code></dd></div>
     <div><dt>Technologies</dt><dd>Cloud SQL PostgreSQL 16, Datastream, Pub/Sub, BigQuery, Cloud Run jobs, Cloud Scheduler, dbt, Terraform, Python</dd></div>
   </dl>
@@ -689,15 +689,15 @@ pre.tree .new{color:var(--green)}
   <div class="sub"><h3><span class="no">5.1</span>Foundation prerequisites</h3>
     <p class="prose">The plan lists 0.2, 0.3, 0.5, 0.6 and 0.7 as POC A's needs. All of them are checked at Gate G5 (end of Day 2).</p>
     <div class="tscroll"><table>
-      <thead><tr><th>Prerequisite</th><th>Owner</th><th>Why POC A needs it</th><th>Check</th></tr></thead>
+      <thead><tr><th>Prerequisite</th><th>Owner</th><th>Why POC A needs it</th><th>Check</th><th>Status (22 Nov)</th></tr></thead>
       <tbody>
-        <tr><td>0.2 Terraform skeleton</td><td class="nw">Dev 4</td><td>Modules plug into <code>terraform/shared</code>; APIs (Cloud SQL Admin, Datastream, Pub/Sub, BigQuery, Data Transfer, Cloud Run, Scheduler, Secret Manager) are on</td><td>CI runs <code>terraform plan</code> for <code>shared</code> and <code>dev</code></td></tr>
-        <tr><td>0.3 Frozen POC 1 baseline</td><td class="nw">Dev 1</td><td>A3 seeds from the same batch folder; AT-15 and C4 compare against it</td><td><code>docs/poc2/baseline.md</code> names the batch folder and row counts</td></tr>
-        <tr><td>0.5 G2 schema</td><td class="nw">Dev 3</td><td>The 11 tables that A2 publishes</td><td>Applies cleanly to a local PostgreSQL 16</td></tr>
-        <tr><td>0.6 Simulator, scripted mode</td><td class="nw">Dev 3</td><td><code>seed</code> and <code>batch --n 1..3</code>, with <code>expected/batch_&lt;n&gt;.json</code></td><td>Runs against PostgreSQL in Docker; pytest green</td></tr>
-        <tr><td>0.7 Specs</td><td class="nw">Dev 5</td><td>Avro schema (with Dev 4), tenant model for <code>store_access</code>, personal-data inventory</td><td><code>docs/poc2/specs.md</code> reviewed by Dev 3 and Dev 4</td></tr>
-        <tr><td>0.10 Cloud SQL module</td><td class="nw">Dev 2</td><td>A1 applies it</td><td><code>terraform plan</code> shows <code>poc-ops-db</code> with the logical decoding flag</td></tr>
-        <tr><td>0.4 dbt skeleton</td><td class="nw">Dev 1</td><td>A10 builds views with <code>--target local</code></td><td><code>dbt debug</code> passes on a laptop and in CI</td></tr>
+        <tr><td>0.2 Terraform skeleton</td><td class="nw">Dev 4</td><td>Modules plug into <code>terraform/shared</code>; APIs (Cloud SQL Admin, Datastream, Pub/Sub, BigQuery, Data Transfer, Cloud Run, Scheduler, Secret Manager) are on</td><td>CI runs <code>terraform plan</code> for <code>shared</code> and <code>dev</code></td><td>All 10 POC A APIs on (20 Nov), Artifact Registry included; module code not yet in the repository</td></tr>
+        <tr><td>0.3 Frozen POC 1 baseline</td><td class="nw">Dev 1</td><td>A3 seeds from the same batch folder; AT-15 and C4 compare against it</td><td><code>docs/poc2/baseline.md</code> names the batch folder and row counts</td><td><span class="pill plan">Done</span> <code>clean_data_20261116_190645</code>, 2157 rows; reload skipped (<a href="#s17-progress">17.0</a>)</td></tr>
+        <tr><td>0.5 G2 schema</td><td class="nw">Dev 3</td><td>The 11 tables that A2 publishes</td><td>Applies cleanly to a local PostgreSQL 16</td><td><span class="pill plan">Done</span> <code>sql/g2/schema.sql</code>, generated from the schema page</td></tr>
+        <tr><td>0.6 Simulator, scripted mode</td><td class="nw">Dev 3</td><td><code>seed</code> and <code>batch --n 1..3</code>, with <code>expected/batch_&lt;n&gt;.json</code></td><td>Runs against PostgreSQL in Docker; pytest green</td><td><span class="pill plan">Done</span> pytest 10/10; <code>store_access</code> rows wait for 0.7</td></tr>
+        <tr><td>0.7 Specs</td><td class="nw">Dev 5</td><td>Avro schema (with Dev 4), tenant model for <code>store_access</code>, personal-data inventory</td><td><code>docs/poc2/specs.md</code> reviewed by Dev 3 and Dev 4</td><td><span class="pill open">Not written</span></td></tr>
+        <tr><td>0.10 Cloud SQL module</td><td class="nw">Dev 2</td><td>A1 applies it</td><td><code>terraform plan</code> shows <code>poc-ops-db</code> with the logical decoding flag</td><td><span class="pill open">Not started</span></td></tr>
+        <tr><td>0.4 dbt skeleton</td><td class="nw">Dev 1</td><td>A10 builds views with <code>--target local</code></td><td><code>dbt debug</code> passes on a laptop and in CI</td><td>Folders only</td></tr>
       </tbody>
     </table></div>
   </div>
@@ -1481,6 +1481,15 @@ python -m simulator revoke|grant --principal <email> --account <id>   # store_ac
       <li><code>S999</code> has no CRM record, so its <code>tenant_id</code> is NULL and it is internal-only. Only the internal identity sees it.</li>
       <li>Seed the <code>heartbeat</code> row <code>simulator</code> and the <code>store_access</code> rows from the tenant model in <code>specs.md</code>. <span class="pill sug">Suggested</span></li>
     </ul>
+    <div class="note dec"><b>As built (0.6, 22 Nov 2026)</b>
+      <ul class="bul">
+        <li><b>No file is read from the Phase 1 bucket.</b> The vendored generator is deterministic (<code>SEED = 42</code>, <code>AS_OF = 2026-10-20</code>) and rebuilds <code>clean_data_20261116_190645</code> byte for byte. The seed checks every CSV's MD5 against that folder's <code>manifest.json</code> (pinned in <code>simulator/baseline.py</code>) and stops on any difference, for example a different <code>data-lake-schema</code> version.</li>
+        <li>Steps, in one transaction: schema check (11 tables, expected columns), refuse if not empty, <code>COPY</code> the 9 tables (empty string to NULL; the server casts text to <code>BOOLEAN</code>/<code>TIMESTAMPTZ</code>), add <code>S999</code>, <code>D999</code> and the <code>simulator</code> heartbeat, then compare counts with the baseline plus probe rows or roll back.</li>
+        <li><code>seed --reset</code> empties the tables first, and is refused unless <code>PG_HOST</code> is a local name, so Cloud SQL can't be re-seeded by accident (phase 3 pitfall).</li>
+        <li><code>store_access</code> stays empty until the tenant model exists (0.7).</li>
+        <li><code>data-lake-schema==1.0.0</code> comes from the Phase 1 Artifact Registry (<code>data-lake-poc-512405</code>). The A8 image build and any CI step that installs the simulator need read access to it: a cross-project grant. <span class="pill open">Open</span></li>
+      </ul>
+    </div>
   </div>
 
   <div class="sub"><h3><span class="no">10.4</span>Scripted batches (for repeatable tests)</h3>
@@ -1493,6 +1502,15 @@ python -m simulator revoke|grant --principal <email> --account <id>   # store_ac
       </tbody>
     </table></div>
     <p class="small">After each batch the simulator updates <code>heartbeat</code> with <code>source = 'batch-&lt;n&gt;'</code>; tests wait for that row in <code>raw_g2</code>. The expected state after each batch is in <code>simulator/expected/batch_&lt;n&gt;.json</code>: open, closed and deleted counts, and the planted rows.</p>
+    <div class="note dec"><b>As built (0.6, 22 Nov 2026)</b>
+      <ul class="bul">
+        <li>Each batch draws from its own fixed random seed, picks rows in key order and stamps fixed times (<code>AS_OF</code> + n hours). They run in order, once each; <code>batch-&lt;n&gt;</code> is written last.</li>
+        <li>"Acknowledged" is the generator's <code>ASSIGNED</code> step (Not Started → In Review with an assignee). Every status change writes a history row, so batch 1 writes <b>50</b> history rows (40 for the new incidents, 10 for the acknowledgements), batch 2 writes 15 and batch 3 writes 16. <span class="pill ver">Review · Dev 2</span></li>
+        <li>Batch 2 deletes 3 resolved POC 1 incidents and their 6 history rows. Batch 3's double updates (Case Opened, then Case Updated) are two transactions, so CDC sees two commits. The planted rows use year 2099 (DQ34), device <code>D990</code> (DQ33) and resolved one hour before created (DQ38).</li>
+        <li>Each file holds <code>changes</code> (the ids each batch touched) and <code>state</code> (row counts, open/closed incidents, and an MD5 fingerprint per table without <code>updated_at</code>, <code>beat_at</code>, <code>granted_at</code>). After a batch the command compares the database with its file and exits 1 on any difference.</li>
+        <li>The files are exact <b>on a freshly seeded database only</b>: see "Batch expectations" in section 21.</li>
+      </ul>
+    </div>
   </div>
 
   <div class="sub"><h3><span class="no">10.5</span>One continuous tick (<code>RATE=1.0</code>)</h3>
@@ -2160,6 +2178,22 @@ sources:
     <button class="btn" id="resetBtn">Clear all ticks</button>
   </div>
 
+  <!-- ---------- build progress log: add a row per finished step, newest first ---------- -->
+  <div class="sub" id="s17-progress"><h3><span class="no">17.0</span>Build progress log</h3>
+    <p class="prose">What has actually been built, and where it differs from this guide or the plan. Newest first. Update this table in the same commit as the work.</p>
+    <div class="tscroll"><table>
+      <thead><tr><th>Date</th><th>Task</th><th>What was done</th><th>Where</th><th>Differences and follow-ups</th></tr></thead>
+      <tbody>
+        <tr><td class="nw">22 Nov</td><td class="nw">Phase 0</td><td>Local proof done on PostgreSQL 16.16 in Docker: schema, seed, batches 1–3 each match their expected file, pytest 10/10</td><td>—</td><td>Port 5432 was taken by a local PostgreSQL service, so the container ran on <code>-p 5434:5432</code> with <code>PG_PORT=5434</code></td></tr>
+        <tr><td class="nw">22 Nov</td><td class="nw">0.6</td><td>Simulator scripted mode: <code>seed</code>, <code>batch --n 1..3</code>, <code>expected/batch_1..3.json</code>, pytest (10 tests). Seed and batches run twice on a fresh database give identical results</td><td><code>simulator/</code></td><td>Seed rebuilds the batch in memory and checks MD5s instead of reading the bucket (10.3). Batch 1 writes 50 history rows, not 40 (10.4). <code>store_access</code> waits for 0.7. CI's pytest step doesn't include <code>simulator/</code> yet, and would need read access to the Phase 1 Artifact Registry. <code>PG_INSTANCE</code> (Cloud SQL connector) comes with A3/A8</td></tr>
+        <tr><td class="nw">22 Nov</td><td class="nw">0.6</td><td>Generator vendored from <code>data-gen-upload-data-lake-poc</code> at <code>4edc2ba</code>, SHA-256 <code>9d9b747d…3f24</code></td><td><code>simulator/vendor/</code></td><td>A test fails if the copy changes</td></tr>
+        <tr><td class="nw">20 Nov</td><td class="nw">0.3</td><td>Baseline recorded: batch <code>clean_data_20261116_190645</code>, 9 tables, 2157 rows, 0 rejected. Snapshots in <code>data-lake-poc-512405.poc1_baseline</code> (17 Nov)</td><td><code>docs/poc2/baseline.md</code></td><td><b>Plan step 3 (empty and reload) skipped</b>: every warehouse row already came from that one batch</td></tr>
+        <tr><td class="nw">20 Nov</td><td class="nw">0.5</td><td>G2 schema: 11 tables, id-format checks, no foreign keys, <code>updated_at</code> trigger. Generated by running the schema page's own "Copy sql/g2/schema.sql" code</td><td><code>sql/g2/schema.sql</code></td><td>Plain <code>CREATE TABLE</code>: applies once only (phase 2 pitfall). Confirmed on PostgreSQL 16.16 in Docker on 22 Nov (and 17 locally)</td></tr>
+        <tr><td class="nw">20 Nov</td><td class="nw">Phase 0</td><td>Workstation checked (gcloud auth and ADC, project, Terraform 1.17.1, Python 3.12, psql 17). All 10 APIs on</td><td>—</td><td>Gate G5 not passed: <code>specs.md</code> (0.7) and <code>spikes.md</code> (0.9) not written; no Terraform module or dbt project code yet</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
   <!-- ---------- P0 ---------- -->
   <article class="phase ownable" id="p0" data-own="d1 d2 d3 d4">
     <header>
@@ -2189,10 +2223,14 @@ psql --version         # client 16, for manual checks</script></div></li>
           <script type="text/plain" class="code" data-lang="bash" data-tag="sug">docker run -d --name g2pg -e POSTGRES_PASSWORD=local -p 5432:5432 postgres:16
 psql "postgresql://postgres:local@localhost:5432/postgres" -c "CREATE DATABASE g2"
 psql "postgresql://postgres:local@localhost:5432/g2" -v ON_ERROR_STOP=1 -f sql/g2/schema.sql
-# with the simulator's local settings (PG_HOST=localhost, PG_DB=g2, ...)
-python -m simulator seed --batch <folder>
-python -m simulator batch --n 1
-pytest simulator/</script></div></li>
+python -m venv .venv
+.venv/Scripts/python -m pip install keyrings.google-artifactregistry-auth
+.venv/Scripts/python -m pip install -r simulator/requirements-dev.txt   # data-lake-schema from the Phase 1 registry
+export PG_HOST=localhost PG_PORT=5432 PG_DB=g2 PG_USER=postgres PG_PASSWORD=local
+.venv/Scripts/python -m simulator seed --batch clean_data_20261116_190645
+for n in 1 2 3; do .venv/Scripts/python -m simulator batch --n $n; done   # each prints "matches batch_<n>.json"
+SIM_TEST_PG="host=localhost port=5432 user=postgres password=local" .venv/Scripts/python -m pytest simulator</script>
+          <p class="small">If port 5432 is taken (a local PostgreSQL service, for example), use <code>-p 5434:5432</code> and port 5434 everywhere: otherwise <code>localhost:5432</code> reaches the other server. Start again with <code>seed --batch … --reset</code> (local only). Expect 41 stores and 133 devices after the seed (baseline + probe). Commands and settings are in <code>simulator/README.md</code>.</p></div></li>
       </ol>
       <div class="expect"><b>Result</b><span>Everyone can start their Day 3 task without waiting for anyone.</span></div>
     </div>
@@ -2883,7 +2921,10 @@ gcloud pubsub subscriptions pull poc-case-events-dlq-sub --limit=5</script>
       <tr><td><code>int</code> environment</td><td>The repository README gives <code>int</code> its own project, <code>gks-datalake-poc2-int</code>. D-22 has <code>dev</code> and <code>int</code> share one project and the landing datasets. Who reads <code>raw_g2</code> from <code>int</code>, and with which grants?</td><td><span class="pill open">Open</span></td><td>E9, A4, A6, A9 IAM</td></tr>
       <tr><td>Probe ids</td><td><code>S999</code>/<code>D999</code> replace <code>S-PROBE</code>. Update the plan's A3 and AT-16 text</td><td><span class="pill sch">Changed · decision 1</span></td><td>A3, AT-16</td></tr>
       <tr><td>Simulator image build</td><td>The plan's A8 builds the image in the data-gen repo's Cloud Build. That repository is read-only; build from <code>simulator/</code> here</td><td><span class="pill sch">Changed</span></td><td>A8, E2</td></tr>
-      <tr><td>Artifact Registry</td><td>The repository name, and turning on <code>artifactregistry.googleapis.com</code> (not in the 0.2 API list)</td><td><span class="pill open">Open</span></td><td>0.2, A8</td></tr>
+      <tr><td>Artifact Registry</td><td>The repository name, and turning on <code>artifactregistry.googleapis.com</code> (not in the 0.2 API list). The API is on (checked 20 Nov); the repository name is still open</td><td><span class="pill open">Open</span></td><td>0.2, A8</td></tr>
+      <tr><td><code>data-lake-schema</code> source</td><td>The vendored generator needs <code>data-lake-schema==1.0.0</code>, published only in the Phase 1 registry (<code>data-lake-poc-512405</code>). The simulator image build (A8) and CI need a cross-project reader grant, or the package must be mirrored into POC 2's registry</td><td><span class="pill open">Open</span></td><td>A8, E1</td></tr>
+      <tr><td>Baseline reload</td><td>Plan 0.3 step 3 (empty <code>poc_dwh_dev</code> and reload one batch) was skipped: all 9 tables already held only <code>clean_data_20261116_190645</code> (see <code>baseline.md</code>)</td><td><span class="pill sch">Changed · 20 Nov</span></td><td>0.3, A3, C4</td></tr>
+      <tr><td>Batch 1 history rows</td><td>"Acknowledged" read as the <code>ASSIGNED</code> step, with a history row per status change: batch 1 writes 50 history rows, not the plan's 40</td><td><span class="pill ver">Review · Dev 2</span></td><td>0.6, AT-17</td></tr>
       <tr><td>Datastream metadata</td><td>Real field names, <code>change_type</code> values, whether updates come as pairs, whether <code>change_sequence_number</code> sorts as text</td><td><span class="pill ver">Verify · A4</span></td><td>A10</td></tr>
       <tr><td>Datastream SSL</td><td>Whether the connection profile needs an explicit SSL setting with the provider version in use</td><td><span class="pill ver">Verify · A4</span></td><td>A4</td></tr>
       <tr><td>Slot creation rights</td><td>Whether <code>postgres</code> needs <code>REPLICATION</code> before creating the slot in Cloud SQL</td><td><span class="pill ver">Verify · A2</span></td><td>A2</td></tr>
@@ -2894,7 +2935,7 @@ gcloud pubsub subscriptions pull poc-case-events-dlq-sub --limit=5</script>
       <tr><td>Scheduled-query identity</td><td>Which service account runs the <code>derived_alert</code> query</td><td><span class="pill open">Open</span></td><td>A9</td></tr>
       <tr><td>Second project</td><td>Whether <code>sim_g2_datalake</code> gets its own project</td><td><span class="pill open">Open · A9</span></td><td>A9, AT-33</td></tr>
       <tr><td><code>_source_updated_at</code> on <code>fct_alert</code></td><td>Proposal P3: also cover the newest history change</td><td><span class="pill open">Proposed · P3</span></td><td>A11</td></tr>
-      <tr><td>Batch expectations</td><td><code>batch_&lt;n&gt;.json</code> holds absolute counts, but by Day 8 the database has days of continuous changes. Express expectations per batch-touched incident instead</td><td><span class="pill open">Open</span></td><td>0.6, A12</td></tr>
+      <tr><td>Batch expectations</td><td><code>batch_&lt;n&gt;.json</code> holds absolute counts, but by Day 8 the database has days of continuous changes. Express expectations per batch-touched incident instead. <b>22 Nov:</b> the files now hold both <code>changes</code> (the ids each batch touched) and the full <code>state</code>; the state is exact on a fresh seed only, and the batches pick rows from the current data. For A12 on a busy database, the batches must pick from rows the simulator doesn't touch (or pause it) and the check must use <code>changes</code> only</td><td><span class="pill open">Open · partly done</span></td><td>0.6, A12</td></tr>
       <tr><td>Script names</td><td>AT-16, AT-22, AT-23 script names; <code>snapshot_raw_g2.sh</code></td><td><span class="pill sug">Suggested</span></td><td>A5, A12</td></tr>
       <tr><td>Cadence and region</td><td>D-26 (15 minutes in <code>dev</code>) and D-21 (<code>us-central1</code>) were <i>Confirm at G5</i></td><td><span class="pill ver">Check G5 record</span></td><td>AT-16, all</td></tr>
     </tbody>
