@@ -4,6 +4,30 @@
 -- Columns in var pii_value_scan_allow hold emails by design (map_tenant_access.principal, decision 3) and are skipped.
 -- It reads every text column, so the daily full load runs it (plan E6 step 5); the micro-batch may skip it with
 -- --exclude tag:dq41_value_scan.
+-- The scan reads build through INFORMATION_SCHEMA, which dbt cannot see as a dependency. Without the lines
+-- below it runs at the start of dbt build, scans the previous run's tables, and lets this run's emails through
+-- to publish. Add any new build model here.
+-- depends_on: {{ ref('dim_account') }}
+-- depends_on: {{ ref('dim_alert_type') }}
+-- depends_on: {{ ref('dim_date') }}
+-- depends_on: {{ ref('dim_device') }}
+-- depends_on: {{ ref('dim_offender') }}
+-- depends_on: {{ ref('dim_store') }}
+-- depends_on: {{ ref('dim_wheel') }}
+-- depends_on: {{ ref('fct_alert') }}
+-- depends_on: {{ ref('fct_alert_history') }}
+-- depends_on: {{ ref('fct_case') }}
+-- depends_on: {{ ref('fct_wheel_event') }}
+-- depends_on: {{ ref('fct_work_order') }}
+-- depends_on: {{ ref('map_tenant_access') }}
+-- depends_on: {{ ref('mv_alert_trend_daily') }}
+-- depends_on: {{ ref('mv_alert_trend_weekly') }}
+-- depends_on: {{ ref('mv_cart_count_daily') }}
+-- depends_on: {{ ref('mv_current_issues') }}
+-- depends_on: {{ ref('mv_downtime_interval') }}
+-- depends_on: {{ ref('mv_incident_health') }}
+-- depends_on: {{ ref('mv_store_health') }}
+-- depends_on: {{ ref('status') }}
 {% set allow = var('pii_value_scan_allow') %}
 {% set email_regex = "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}" %}
 {% set cols = [] %}

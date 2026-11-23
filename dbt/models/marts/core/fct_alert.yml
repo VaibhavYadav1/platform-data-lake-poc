@@ -135,7 +135,8 @@ models:
 
 unit_tests:
   # AT-18 (A11): the incremental filter never replaces a stored row with an older change, and still lets newer
-  # changes and new incidents through. Run with: dbt build --select +fct_alert --empty, then dbt test --select fct_alert
+  # changes and new incidents through. The stored rows (`this`) are given as SQL, so dbt does not need fct_alert to
+  # exist yet: a dict fixture for `this` fails on the first build in a new dataset and skips fct_alert and everything after it.
   - name: at18_older_change_does_not_overwrite
     description: "INC-1 arrives with an older change than the stored row and must be skipped; INC-2 (new) and INC-3 (newer change) pass."
     model: fct_alert
@@ -145,9 +146,11 @@ unit_tests:
         tokenize: "cast(null as string)"   # no token key needed in a unit test
     given:
       - input: this
-        rows:
-          - {incident_id: INC-1, _source_updated_at: "2026-11-20 10:00:00"}
-          - {incident_id: INC-3, _source_updated_at: "2026-11-20 10:00:00"}
+        format: sql
+        rows: |
+          select 'INC-1' as incident_id, timestamp '2026-11-20 10:00:00' as _source_updated_at
+          union all
+          select 'INC-3', timestamp '2026-11-20 10:00:00'
       - input: ref('int_alert__validated')
         rows:
           - {incident_id: INC-1, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, created_at: "2026-11-20 09:00:00", is_deleted: false, _dq_status: PASS, _source_updated_at: "2026-11-20 09:50:00"}

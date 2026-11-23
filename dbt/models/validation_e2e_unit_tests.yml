@@ -1,0 +1,244 @@
+version: 2
+# Local end-to-end validation check (not committed). Each unit test plants bad rows and checks that the
+# validation code catches them. dbt only reads column types from existing tables; nothing is written.
+
+unit_tests:
+  # ③ Row rules: every critical and warning reason on one planted incident each
+  - name: e2e_int_alert_every_rule
+    model: int_alert__validated
+    given:
+      - input: ref('stg_g2__stores')
+        rows:
+          - {store_id: S1, is_active: true, is_deleted: false}
+          - {store_id: S2, is_active: false, is_deleted: false}
+          - {store_id: S9, is_active: true, is_deleted: true}
+      - input: ref('stg_g2__device_locations')
+        rows:
+          - {device_id: D1, store_id: S1, device_type: Door Manager, is_deleted: false}
+          - {device_id: D2, store_id: S2, device_type: Door Manager, is_deleted: false}
+          - {device_id: D3, store_id: S1, device_type: Camera, is_deleted: false}
+          - {device_id: D4, store_id: S2, device_type: Door Manager, is_deleted: false}
+      - input: ref('stg_g2__alert_types')
+        rows:
+          - {alert_type_id: AT01, device_type: Door Manager, is_deleted: false}
+          - {alert_type_id: AT02, device_type: Door Manager, is_deleted: true}
+      - input: ref('stg_g2__statuses')
+        rows:
+          - {status_id: 1, status_name: Not Started, is_closed: false, is_deleted: false}
+          - {status_id: 6, status_name: Resolved, is_closed: true, is_deleted: false}
+      - input: ref('stg_g2__alert_incidents')
+        rows:
+          - {incident_id: PASS_OK,        alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-01 10:00:00", resolved_at: "2026-08-01 11:00:00", is_deleted: false}
+          - {incident_id: Q_DQ33_DEVICE,  alert_id: ALR-DX-AT01, store_id: S1, device_id: DX, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-02 10:00:00", resolved_at: "2026-08-02 11:00:00", is_deleted: false}
+          - {incident_id: Q_DQ33_STORE,   alert_id: ALR-D1-AT01, store_id: S9, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-03 10:00:00", resolved_at: "2026-08-03 11:00:00", is_deleted: false}
+          - {incident_id: Q_ALERT_TYPE,   alert_id: ALR-D1-AT02, store_id: S1, device_id: D1, alert_type_id: AT02, current_status: Resolved,    created_at: "2026-08-03 12:00:00", resolved_at: "2026-08-03 13:00:00", is_deleted: false}
+          - {incident_id: Q_DQ34_CREATED, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Not Started, created_at: "2030-01-01 00:00:00", is_deleted: false}
+          - {incident_id: Q_DQ34_RESOLVED, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,   created_at: "2026-08-04 10:00:00", resolved_at: "2030-01-01 00:00:00", is_deleted: false}
+          - {incident_id: Q_DQ38,         alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-05 10:00:00", resolved_at: "2026-08-05 09:00:00", is_deleted: false}
+          - {incident_id: W_STATUS,       alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Bogus,       created_at: "2026-08-06 10:00:00", resolved_at: "2026-08-06 11:00:00", is_deleted: false}
+          - {incident_id: W_DQ08,         alert_id: ALR-D4-AT01, store_id: S1, device_id: D4, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-07 10:00:00", resolved_at: "2026-08-07 11:00:00", is_deleted: false}
+          - {incident_id: W_DEVICE_TYPE,  alert_id: ALR-D3-AT01, store_id: S1, device_id: D3, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-08 10:00:00", resolved_at: "2026-08-08 11:00:00", is_deleted: false}
+          - {incident_id: W_DQ25,         alert_id: ALR-D2-AT01, store_id: S2, device_id: D2, alert_type_id: AT01, current_status: Not Started, created_at: "2026-08-10 10:00:00", is_deleted: false}
+          - {incident_id: W_BAD_ALERT_ID, alert_id: WRONG,       store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-11 10:00:00", resolved_at: "2026-08-11 11:00:00", is_deleted: false}
+          - {incident_id: W_DQ29_FIRST,   alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-12 10:00:00", resolved_at: "2026-08-12 12:00:00", is_deleted: false}
+          - {incident_id: W_DQ29_OVERLAP, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-12 11:00:00", resolved_at: "2026-08-12 13:00:00", is_deleted: false}
+          - {incident_id: P_BACK_TO_BACK, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-12 13:00:00", resolved_at: "2026-08-12 14:00:00", is_deleted: false}
+          - {incident_id: W_DQ13,         alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, current_status: Resolved,    created_at: "2026-08-30 10:00:00", is_deleted: false}
+    expect:
+      rows:
+        - {incident_id: PASS_OK,         _dq_status: PASS,       _dq_reasons: []}
+        - {incident_id: Q_DQ33_DEVICE,   _dq_status: QUARANTINE, _dq_reasons: [DQ33]}
+        - {incident_id: Q_DQ33_STORE,    _dq_status: QUARANTINE, _dq_reasons: [DQ33, DQ08]}
+        - {incident_id: Q_ALERT_TYPE,    _dq_status: QUARANTINE, _dq_reasons: [UNKNOWN_ALERT_TYPE]}
+        - {incident_id: Q_DQ34_CREATED,  _dq_status: QUARANTINE, _dq_reasons: [DQ34]}
+        - {incident_id: Q_DQ34_RESOLVED, _dq_status: QUARANTINE, _dq_reasons: [DQ34]}
+        - {incident_id: Q_DQ38,          _dq_status: QUARANTINE, _dq_reasons: [DQ38]}
+        - {incident_id: W_STATUS,        _dq_status: WARN,       _dq_reasons: [UNKNOWN_STATUS]}
+        - {incident_id: W_DQ08,          _dq_status: WARN,       _dq_reasons: [DQ08]}
+        - {incident_id: W_DEVICE_TYPE,   _dq_status: WARN,       _dq_reasons: [DEVICE_TYPE_MISMATCH]}
+        - {incident_id: W_DQ25,          _dq_status: WARN,       _dq_reasons: [DQ25]}
+        - {incident_id: W_BAD_ALERT_ID,  _dq_status: WARN,       _dq_reasons: [BAD_ALERT_ID]}
+        - {incident_id: W_DQ29_FIRST,    _dq_status: PASS,       _dq_reasons: []}
+        - {incident_id: W_DQ29_OVERLAP,  _dq_status: WARN,       _dq_reasons: [DQ29]}
+        - {incident_id: P_BACK_TO_BACK,  _dq_status: PASS,       _dq_reasons: []}
+        - {incident_id: W_DQ13,          _dq_status: WARN,       _dq_reasons: [DQ13]}
+
+  # ④ Quarantine split: only PASS and WARN reach fct_alert
+  - name: e2e_fct_alert_excludes_quarantine
+    model: fct_alert
+    overrides:
+      macros: {tokenize: "cast(null as string)", is_incremental: false}
+    given:
+      - input: ref('int_alert__validated')
+        rows:
+          - {incident_id: INC-P, store_id: S1, device_id: D1, alert_type_id: AT01, created_at: "2026-08-01 10:00:00", is_deleted: false, _dq_status: PASS, _source_updated_at: "2026-08-01 10:00:00"}
+          - {incident_id: INC-W, store_id: S1, device_id: D1, alert_type_id: AT01, created_at: "2026-08-01 11:00:00", is_deleted: false, _dq_status: WARN, _source_updated_at: "2026-08-01 11:00:00"}
+          - {incident_id: INC-Q, store_id: S9, device_id: D1, alert_type_id: AT01, created_at: "2026-08-01 12:00:00", is_deleted: false, _dq_status: QUARANTINE, _source_updated_at: "2026-08-01 12:00:00"}
+      - {input: ref('stg_g2__alert_history'), rows: []}
+      - {input: ref('dim_store'), rows: []}
+      - {input: ref('dim_alert_type'), rows: []}
+      - {input: ref('status'), rows: []}
+      - {input: ref('stg_g2__users'), rows: []}
+      - {input: ref('stg_g2__teams'), rows: []}
+    expect:
+      rows:
+        - {incident_id: INC-P, _dq_status: PASS}
+        - {incident_id: INC-W, _dq_status: WARN}
+
+  # ④ History of a quarantined incident stays out of fct_alert_history; an orphan event is kept
+  - name: e2e_fct_alert_history_excludes_quarantined
+    model: fct_alert_history
+    overrides:
+      macros: {tokenize: "cast(null as string)", is_incremental: false}
+    given:
+      - input: ref('stg_g2__alert_history')
+        rows:
+          - {history_id: H1, incident_id: INC-P, event_type: CREATED, event_timestamp: "2026-08-01 10:00:00", is_deleted: false, _source_updated_at: "2026-08-01 10:00:00"}
+          - {history_id: H2, incident_id: INC-Q, event_type: CREATED, event_timestamp: "2026-08-01 12:00:00", is_deleted: false, _source_updated_at: "2026-08-01 12:00:00"}
+          - {history_id: H3, incident_id: INC-ORPHAN, event_type: COMMENT, event_timestamp: "2026-08-01 13:00:00", is_deleted: false, _source_updated_at: "2026-08-01 13:00:00"}
+      - input: ref('int_alert__validated')
+        rows:
+          - {incident_id: INC-P, _dq_status: PASS}
+          - {incident_id: INC-Q, _dq_status: QUARANTINE}
+      - input: ref('fct_alert')
+        rows:
+          - {incident_id: INC-P, store_id: S1}
+      - {input: ref('status'), rows: []}
+    expect:
+      rows:
+        - {history_id: H1, incident_id: INC-P, store_id: S1}
+        - {history_id: H3, incident_id: INC-ORPHAN, store_id: null}
+
+  # ③ Quarantined incidents' history is kept in dq, not dropped
+  - name: e2e_quarantine_alert_history
+    model: quarantine_alert_history
+    given:
+      - input: ref('stg_g2__alert_history')
+        rows:
+          - {history_id: H1, incident_id: INC-P}
+          - {history_id: H2, incident_id: INC-Q}
+      - input: ref('int_alert__validated')
+        rows:
+          - {incident_id: INC-P, _dq_status: PASS}
+          - {incident_id: INC-Q, _dq_status: QUARANTINE}
+    expect:
+      rows:
+        - {history_id: H2, incident_id: INC-Q}
+
+  # ③ Tenant reasons: DQ37, DQ46 (two cases), DQ45
+  - name: e2e_int_store_tenant_reasons
+    model: int_store__tenant
+    given:
+      - input: ref('stg_g2__stores')
+        rows:
+          - {store_id: S_OK, is_deleted: false}
+          - {store_id: S_NO_CRM, is_deleted: false}
+          - {store_id: S_MULTI, is_deleted: false}
+          - {store_id: S_UNKNOWN_ACCOUNT, is_deleted: false}
+          - {store_id: S_BROKEN, is_deleted: false}
+      - input: ref('int_crm__store')
+        rows:
+          - {crm_store_id: CS1, g2_store_id: S_OK, account_id: A1, status: Active}
+          - {crm_store_id: CS2, g2_store_id: S_MULTI, account_id: A1, status: Active}
+          - {crm_store_id: CS3, g2_store_id: S_MULTI, account_id: A1, status: Active}
+          - {crm_store_id: CS4, g2_store_id: S_UNKNOWN_ACCOUNT, account_id: A_MISSING, status: Active}
+          - {crm_store_id: CS5, g2_store_id: S_BROKEN, account_id: A_LOOP, status: Active}
+      - input: ref('int_crm__account')
+        rows:
+          - {account_id: A1, customer_type_code: "100000000", status: Active}
+          - {account_id: A_LOOP, customer_type_code: "100000000", status: Active, parent_account_id: A_LOOP}
+      - input: ref('int_account__tenant')
+        rows:
+          - {account_id: A1, tenant_id: A1, hierarchy_depth: 0}
+      - input: ref('map_customer_type')
+        rows:
+          - {customer_type_code: "100000000", customer_type_enum: CUSTOMER}
+    expect:
+      rows:
+        - {store_id: S_OK, tenant_id: A1, tenant_reason: ASSIGNED, is_customer_store: true}
+        - {store_id: S_NO_CRM, tenant_id: null, tenant_reason: NO_CRM_RECORD, is_customer_store: false}
+        - {store_id: S_MULTI, tenant_id: null, tenant_reason: MULTIPLE_ACTIVE_RECORDS, is_customer_store: false}
+        - {store_id: S_UNKNOWN_ACCOUNT, tenant_id: null, tenant_reason: UNKNOWN_ACCOUNT, is_customer_store: false}
+        - {store_id: S_BROKEN, tenant_id: null, tenant_reason: BROKEN_HIERARCHY, is_customer_store: false}
+
+  # ④ DQ36: unknown CRM type code becomes UNKNOWN and is not a customer
+  - name: e2e_dim_account_dq36
+    model: dim_account
+    given:
+      - input: ref('int_crm__account')
+        rows:
+          - {account_id: A1, customer_type_code: "100000000", status: Active}
+          - {account_id: A2, customer_type_code: "999", status: Active}
+      - input: ref('map_customer_type')
+        rows:
+          - {customer_type_code: "100000000", customer_type_enum: CUSTOMER, customer_type_name: Customer}
+      - input: ref('int_account__tenant')
+        rows:
+          - {account_id: A1, tenant_id: A1}
+          - {account_id: A2, tenant_id: A2}
+    expect:
+      rows:
+        - {account_id: A1, customer_type_enum: CUSTOMER, is_customer: true}
+        - {account_id: A2, customer_type_enum: UNKNOWN, is_customer: false}
+
+  # ④ DQ43: wheel event for an unknown wheel is kept and flagged
+  - name: e2e_fct_wheel_event_dq43
+    model: fct_wheel_event
+    overrides:
+      macros: {is_incremental: false}
+    given:
+      - input: ref('stg_g2dl__wheel_event')
+        rows:
+          - {event_id: E1, wheel_id: W1, event_ts: "2026-08-01 10:00:00", _loaded_at: "2026-08-01 10:00:00"}
+          - {event_id: E2, wheel_id: WX, event_ts: "2026-08-01 10:00:00", _loaded_at: "2026-08-01 10:00:00"}
+      - input: ref('dim_wheel')
+        rows:
+          - {wheel_id: W1, store_id: S1, tenant_id: T1}
+    expect:
+      rows:
+        - {event_id: E1, store_id: S1, _dq_status: PASS, _dq_reasons: []}
+        - {event_id: E2, store_id: null, _dq_status: WARN, _dq_reasons: [DQ43]}
+
+  # ② DQ35 duplicates counted and one kept; DQ44 unknown store flagged
+  - name: e2e_stg_case_event_dq35_dq44
+    model: stg_lpos__case_event
+    given:
+      - input: source('raw_lpos', 'case_event')
+        rows:
+          - {event_id: E1, g2_store_id: S1, publish_time: "2026-08-01 10:00:00", message_id: M1}
+          - {event_id: E1, g2_store_id: S1, publish_time: "2026-08-01 10:00:05", message_id: M2}
+          - {event_id: E2, g2_store_id: S_UNKNOWN, publish_time: "2026-08-01 10:00:00", message_id: M3}
+      - input: ref('stg_g2__stores')
+        rows:
+          - {store_id: S1, is_deleted: false}
+    expect:
+      rows:
+        - {event_id: E1, message_id: M1, copies_received: 2, is_unknown_store: false}
+        - {event_id: E2, message_id: M3, copies_received: 1, is_unknown_store: true}
+
+  # ④ DQ47: work order with an unknown account or device is kept and flagged
+  - name: e2e_fct_work_order_dq47
+    model: fct_work_order
+    given:
+      - input: ref('int_crm__work_order')
+        rows:
+          - {work_order_id: WO1, account_id: A1, crm_store_id: CS1, g2_device_id: D1, status: OPEN}
+          - {work_order_id: WO2, account_id: A_MISSING, crm_store_id: CS1, status: OPEN}
+          - {work_order_id: WO3, account_id: A1, crm_store_id: CS1, g2_device_id: D_MISSING, status: OPEN}
+      - input: ref('int_crm__store')
+        rows:
+          - {crm_store_id: CS1, g2_store_id: S1, account_id: A1}
+      - input: ref('dim_account')
+        rows:
+          - {account_id: A1}
+      - input: ref('dim_store')
+        rows:
+          - {store_id: S1, tenant_id: A1}
+      - input: ref('dim_device')
+        rows:
+          - {device_id: D1}
+    expect:
+      rows:
+        - {work_order_id: WO1, _dq_status: PASS, _dq_reasons: []}
+        - {work_order_id: WO2, _dq_status: WARN, _dq_reasons: [DQ47]}
+        - {work_order_id: WO3, _dq_status: WARN, _dq_reasons: [DQ47]}
