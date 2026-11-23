@@ -36,7 +36,8 @@ SLOT, PUBLICATION, TABLE_COUNT = "poc_slot", "poc_pub", 11
 
 def secret(name):
     """Latest version of a Secret Manager secret, read with gcloud. Returned, never printed."""
-    gcloud = shutil.which("gcloud") or "gcloud"
+    # Windows: the bin folder also holds "gcloud", a bash script that Python can't run; use gcloud.cmd.
+    gcloud = shutil.which("gcloud.cmd") or shutil.which("gcloud") or "gcloud"
     run = subprocess.run([gcloud, "secrets", "versions", "access", "latest", f"--secret={name}",
                           f"--project={PROJECT}"], capture_output=True, text=True)
     if run.returncode != 0:
