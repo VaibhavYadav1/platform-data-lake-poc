@@ -1,34 +1,60 @@
 version: 2
 # NOTE: freshness values follow the entity registry (plan E7); adjust there first.
+# Freshness is set per table, only where new rows are expected all the time. Lookup tables (brands, teams,
+# statuses, alert types, stores, devices, users, access) can stay unchanged for days and must not fail freshness.
+# Key columns get not_null (error): a row without a key cannot be deduplicated or merged.
 sources:
   - name: raw_g2
     description: Datastream append-only landing of the simulated G2 database (one row per change).
     schema: "{{ var('g2_raw_dataset', 'raw_g2') }}"
     loaded_at_field: "timestamp_millis(datastream_metadata.source_timestamp)"
-    freshness:
-      warn_after: {count: 8, period: minute}
-      error_after: {count: 30, period: minute}
     tables:
-      - {name: g2_brands}
-      - {name: g2_teams}
-      - {name: g2_statuses}
-      - {name: g2_alert_types}
-      - {name: g2_stores}
-      - {name: g2_device_locations}
-      - {name: g2_users}
-      - {name: g2_alert_incidents}
-      - {name: g2_alert_history}
-      - {name: g2_store_access}
-      - {name: g2_heartbeat}
+      - name: g2_brands
+        columns: [{name: brand_id, data_tests: [not_null]}]
+      - name: g2_teams
+        columns: [{name: team_id, data_tests: [not_null]}]
+      - name: g2_statuses
+        columns: [{name: status_id, data_tests: [not_null]}]
+      - name: g2_alert_types
+        columns: [{name: alert_type_id, data_tests: [not_null]}]
+      - name: g2_stores
+        columns: [{name: store_id, data_tests: [not_null]}]
+      - name: g2_device_locations
+        columns: [{name: device_id, data_tests: [not_null]}]
+      - name: g2_users
+        columns: [{name: user_id, data_tests: [not_null]}]
+      - name: g2_alert_incidents
+        freshness:
+          warn_after: {count: 8, period: minute}
+          error_after: {count: 30, period: minute}
+        columns: [{name: incident_id, data_tests: [not_null]}]
+      - name: g2_alert_history
+        freshness:
+          warn_after: {count: 8, period: minute}
+          error_after: {count: 30, period: minute}
+        columns: [{name: history_id, data_tests: [not_null]}]
+      - name: g2_store_access
+        columns:
+          - {name: principal, data_tests: [not_null]}
+          - {name: crm_account_id, data_tests: [not_null]}
+      - name: g2_heartbeat
+        freshness:   # the heartbeat row is updated all the time, so it shows whether replication is alive
+          warn_after: {count: 8, period: minute}
+          error_after: {count: 30, period: minute}
+        columns: [{name: source, data_tests: [not_null]}]
 
   - name: raw_crm
     schema: "{{ var('crm_raw_dataset', 'raw_crm') }}"
     tables:
       - name: account_landing
         loaded_at_field: export_ts
-        freshness: {warn_after: {count: 75, period: minute}, error_after: {count: 180, period: minute}}   # DQ40
-      - {name: store_landing}
-      - {name: work_order_landing}
+        # DQ40: no new CRM export in 75 minutes is an error (plan section 13). Hourly export, so warn a little earlier.
+        freshness: {warn_after: {count: 65, period: minute}, error_after: {count: 75, period: minute}}
+        columns: [{name: account_id, data_tests: [not_null]}]
+      - name: store_landing
+        columns: [{name: crm_store_id, data_tests: [not_null]}]
+      - name: work_order_landing
+        columns: [{name: work_order_id, data_tests: [not_null]}]
       - {name: load_log}
 
   - name: raw_lpos
@@ -37,13 +63,16 @@ sources:
       - name: case_event
         loaded_at_field: publish_time
         freshness: {warn_after: {count: 5, period: minute}, error_after: {count: 30, period: minute}}
+        columns: [{name: event_id, data_tests: [not_null]}]
 
   - name: sim_g2_datalake
     database: "{{ var('g2dl_project') }}"
     schema: "{{ var('g2dl_dataset', 'sim_g2_datalake') }}"
     tables:
-      - {name: wheel}
+      - name: wheel
+        columns: [{name: wheel_id, data_tests: [not_null]}]
       - name: wheel_event
         loaded_at_field: _loaded_at
         freshness: {warn_after: {count: 30, period: minute}, error_after: {count: 90, period: minute}}
+        columns: [{name: event_id, data_tests: [not_null]}]
       - {name: derived_alert}

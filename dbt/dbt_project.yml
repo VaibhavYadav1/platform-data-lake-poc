@@ -20,6 +20,8 @@ vars:
   incremental_lookback_minutes: 30
   golden_step: baseline           # which golden_store_health checkpoint the golden test compares
   pii_deny_columns: ["email", "phone", "first_name", "last_name", "user_name", "contact_name"]
+  pii_value_scan_allow: ["map_tenant_access.principal"]   # DQ41 value scan: columns that hold emails by design
+  quarantine_error_pct: 5         # C7: above this share of quarantined incidents the run fails
 
 models:
   poc_dwh:
@@ -43,6 +45,10 @@ models:
       +schema: build          # published to sec_{env} by publish.py
       +materialized: table
       +contract: {enforced: true}
+
+# Results history (C7 review step): every test's outcome is appended to ops_{env}.dq_result after each run.
+on-run-end:
+  - "{{ log_dq_results(results) }}"
 
 seeds:
   poc_dwh:

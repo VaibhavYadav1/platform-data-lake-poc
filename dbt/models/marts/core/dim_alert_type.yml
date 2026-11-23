@@ -21,24 +21,34 @@ models:
       - name: category_name
         description: "Internal category"
         data_type: "string"
+        data_tests:
+          - accepted_values: {values: [System Down, Connectivity, General Maintenance, Store Activity, Other, Obsolete, Device Ok]}
       - name: customer_category_name
         description: "Customer category; drives the downtime cause"
         data_type: "string"
       - name: severity
         description: "Sets the default health colour"
         data_type: "string"
+        data_tests:
+          - accepted_values: {values: [Critical, Urgent, Store Action Needed, Warning, Informational]}
       - name: device_type
         description: "Device the alert comes from"
         data_type: "string"
+        data_tests:
+          - accepted_values: {values: [Door Manager, Camera, Cellular Router, Central Transmitter, POE Switch]}
       - name: system_type
         description: "Exit or Containment"
         data_type: "string"
+        data_tests:
+          - accepted_values: {values: [Exit, Containment]}
       - name: customer_facing
         description: "Only these count towards store health"
         data_type: "bool"
       - name: default_priority
         description: "P1 to P5"
         data_type: "string"
+        data_tests:
+          - accepted_values: {values: [P1, P2, P3, P4, P5]}
       - name: not_started_next_step_action
         description: "Action while the alert is Not Started"
         data_type: "string"

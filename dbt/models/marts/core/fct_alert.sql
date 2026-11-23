@@ -3,9 +3,13 @@
     incremental_strategy='merge',
     unique_key='incident_id',
     partition_by={'field': 'alert_date', 'data_type': 'date'},
-    cluster_by=['tenant_id', 'store_id', 'device_id']
+    cluster_by=['tenant_id', 'store_id', 'device_id'],
+    post_hook="delete from {{ this }} where incident_id in (select incident_id from {{ ref('int_alert__validated') }} where _dq_status = 'QUARANTINE')"
 ) }}
 -- Incremental merge on incident_id (A11): 30-minute lookback and a guard against older changes.
+-- The merge only adds or updates rows, so an incident that was loaded and later becomes quarantined (a bad
+-- correction, or its store, device or alert type is deleted) would keep its old row. The post_hook removes it
+-- after every run; quarantine_alert lists it. int_alert__validated is a full table, so it sees every incident.
 -- A full rebuild (--full-refresh, daily load) fixes anything the incremental filter cannot see, e.g. a store
 -- moving to another tenant (DQ39).
 with hist as (

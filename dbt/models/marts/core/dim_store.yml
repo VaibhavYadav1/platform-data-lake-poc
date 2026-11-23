@@ -35,6 +35,10 @@ models:
       - name: country
         description: "ISO country code"
         data_type: "string"
+        data_tests:
+          - dbt_expectations.expect_column_values_to_match_regex:
+              regex: "^[A-Z]{2}$"
+              config: {severity: warn}
       - name: state
         description: "State or province"
         data_type: "string"

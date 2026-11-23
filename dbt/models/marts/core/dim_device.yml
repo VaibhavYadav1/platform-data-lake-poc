@@ -22,6 +22,8 @@ models:
       - name: device_type
         description: "Door Manager, Camera, Cellular Router, Central Transmitter or POE Switch"
         data_type: "string"
+        data_tests:
+          - accepted_values: {values: [Door Manager, Camera, Cellular Router, Central Transmitter, POE Switch]}
       - name: main_door_indicator
         description: "Protects a main exit"
         data_type: "bool"

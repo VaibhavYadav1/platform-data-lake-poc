@@ -2,6 +2,13 @@ version: 2
 models:
   - name: status
     description: Handling-status lookup behind the status columns on the facts. Built from stg_g2__statuses. Not tenant-scoped.
+    data_tests:   # POC 1 dim_status rules
+      - dbt_utils.expression_is_true:
+          name: status_closed_only_for_resolved
+          expression: "coalesce(is_closed, false) = (status_name = 'Resolved')"
+      - dbt_utils.expression_is_true:
+          name: status_next_step_except_not_started
+          expression: "status_name = 'Not Started' or next_step_action is not null"
     columns:
       - name: status_id
         description: "Status key"
@@ -10,10 +17,14 @@ models:
       - name: status_name
         description: "Label; incidents and history are matched on it"
         data_type: "string"
-        data_tests: [unique, not_null]
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values: {values: [Not Started, In Review, Alert is being monitored, Case Opened, Re-Opened, Resolved, Case Updated]}
       - name: is_closed
         description: "Whether the status means the incident is finished"
         data_type: "bool"
+        data_tests: [not_null]
       - name: next_step_action
         description: "Shared action; null for Not Started"
         data_type: "string"

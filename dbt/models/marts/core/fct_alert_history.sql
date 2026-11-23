@@ -3,8 +3,11 @@
     incremental_strategy='merge',
     unique_key='history_id',
     partition_by={'field': 'event_date', 'data_type': 'date'},
-    cluster_by=['tenant_id', 'store_id', 'device_id']
+    cluster_by=['tenant_id', 'store_id', 'device_id'],
+    post_hook="delete from {{ this }} where incident_id in (select incident_id from {{ ref('int_alert__validated') }} where _dq_status = 'QUARANTINE')"
 ) }}
+-- Events of a quarantined incident are kept out with it (quarantine_alert_history holds them); the post_hook
+-- removes events loaded before their incident became quarantined.
 -- Incremental merge on history_id, like fct_alert (A11). Comment text is kept; the daily scan checks it for emails (DQ41).
 with final as (
   select
@@ -39,6 +42,8 @@ with final as (
   left join {{ ref('fct_alert') }} as a  on a.incident_id = h.incident_id   -- orphan events keep null store/device
   left join {{ ref('status') }}    as ps on ps.status_name = h.previous_status
   left join {{ ref('status') }}    as ns on ns.status_name = h.new_status
+  left join {{ ref('int_alert__validated') }} as v on v.incident_id = h.incident_id
+  where v._dq_status is null or v._dq_status != 'QUARANTINE'   -- null: orphan event, kept and flagged by the warn test
 )
 select * from final as src
 {{ incremental_filter('history_id') }}
