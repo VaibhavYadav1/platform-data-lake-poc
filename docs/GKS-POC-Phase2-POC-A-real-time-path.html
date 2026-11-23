@@ -294,7 +294,7 @@ pre.tree .new{color:var(--green)}
     <div><dt>Project</dt><dd>Store Alert Data Lake, Phase 2</dd></div>
     <div><dt>POC</dt><dd>A: real-time path (change data capture and streaming)</dd></div>
     <div><dt>Based on</dt><dd>Approved plan v2.0 (17 Nov 2026), schema round 2 (18 Nov 2026)</dd></div>
-    <div><dt>Guide date</dt><dd>19 Nov 2026 · build progress updated 22 Nov 2026 (<a href="#s17-progress">17.0</a>)</dd></div>
+    <div><dt>Guide date</dt><dd>19 Nov 2026 · build progress updated 23 Nov 2026 (<a href="#s17-progress">17.0</a>)</dd></div>
     <div><dt>Environment</dt><dd><code>gks-datalake-poc2-dev</code>, <code>us-central1</code></dd></div>
     <div><dt>Technologies</dt><dd>Cloud SQL PostgreSQL 16, Datastream, Pub/Sub, BigQuery, Cloud Run jobs, Cloud Scheduler, dbt, Terraform, Python</dd></div>
   </dl>
@@ -696,7 +696,7 @@ pre.tree .new{color:var(--green)}
         <tr><td>0.5 G2 schema</td><td class="nw">Dev 3</td><td>The 11 tables that A2 publishes</td><td>Applies cleanly to a local PostgreSQL 16</td><td><span class="pill plan">Done</span> <code>sql/g2/schema.sql</code>, generated from the schema page</td></tr>
         <tr><td>0.6 Simulator, scripted mode</td><td class="nw">Dev 3</td><td><code>seed</code> and <code>batch --n 1..3</code>, with <code>expected/batch_&lt;n&gt;.json</code></td><td>Runs against PostgreSQL in Docker; pytest green</td><td><span class="pill plan">Done</span> pytest 10/10; <code>store_access</code> rows wait for 0.7</td></tr>
         <tr><td>0.7 Specs</td><td class="nw">Dev 5</td><td>Avro schema (with Dev 4), tenant model for <code>store_access</code>, personal-data inventory</td><td><code>docs/poc2/specs.md</code> reviewed by Dev 3 and Dev 4</td><td><span class="pill open">Not written</span></td></tr>
-        <tr><td>0.10 Cloud SQL module</td><td class="nw">Dev 2</td><td>A1 applies it</td><td><code>terraform plan</code> shows <code>poc-ops-db</code> with the logical decoding flag</td><td><span class="pill open">Not started</span></td></tr>
+        <tr><td>0.10 Cloud SQL module</td><td class="nw">Dev 2</td><td>A1 applies it</td><td><code>terraform plan</code> shows <code>poc-ops-db</code> with the logical decoding flag</td><td><span class="pill plan">Done</span> with A1, PR #3; applied 23 Nov (<a href="#s17-progress">17.0</a>)</td></tr>
         <tr><td>0.4 dbt skeleton</td><td class="nw">Dev 1</td><td>A10 builds views with <code>--target local</code></td><td><code>dbt debug</code> passes on a laptop and in CI</td><td>Folders only</td></tr>
       </tbody>
     </table></div>
@@ -931,6 +931,9 @@ CREATE TRIGGER heartbeat_updated_at
   </div>
 
   <div class="sub"><h3><span class="no">7.2</span>Cloud SQL instance (A1)</h3>
+    <div class="note dec"><b>As built (A1, 23 Nov 2026)</b>
+      <p>Built from the code below in <code>terraform/modules/cloudsql_g2/</code> (<code>main.tf</code>, <code>variables.tf</code> with a <code>tier</code> variable, <code>outputs.tf</code> with <code>instance_name</code>, <code>connection_name</code>, <code>public_ip</code>, <code>secret_ids</code>, <code>versions.tf</code>), called from <code>terraform/shared/cloudsql_g2.tf</code>, which also outputs <code>g2_connection_name</code> and <code>g2_public_ip</code>. Labels are <code>poc</code> and <code>managed_by</code> only (no <code>owner</code>). The admin secret <code>poc-ops-db-postgres</code> was adopted. Datastream had 5 static IPs in <code>us-central1</code>.</p>
+    </div>
     <ul class="bul">
       <li><code>google_sql_database_instance</code>, PostgreSQL 16, smallest shared-core tier <code>db-f1-micro</code>; move to <code>db-g1-small</code> if it struggles. <span class="pill plan">Plan</span></li>
       <li><code>cloudsql.logical_decoding = on</code>. Public IP, SSL required. Authorised networks: Datastream's static IPs for <code>us-central1</code>.</li>
@@ -2184,6 +2187,7 @@ sources:
     <div class="tscroll"><table>
       <thead><tr><th>Date</th><th>Task</th><th>What was done</th><th>Where</th><th>Differences and follow-ups</th></tr></thead>
       <tbody>
+        <tr><td class="nw">23 Nov</td><td class="nw">A1</td><td><code>poc-ops-db</code> applied from <code>main</code> (12 added). Verified: <code>RUNNABLE</code>, PostgreSQL 16.15, <code>us-central1-c</code>, <code>db-f1-micro</code> Enterprise, <code>cloudsql.logical_decoding=on</code>, <code>ENCRYPTED_ONLY</code>, 5 Datastream networks, backups off, database <code>g2</code> (empty), user <code>postgres</code>, 3 secrets at version 1. Through the Auth Proxy: <code>wal_level = logical</code>, <code>ssl = on</code></td><td><code>terraform/modules/cloudsql_g2/</code>, <code>terraform/shared/cloudsql_g2.tf</code> (PR #3)</td><td>Pinned <code>google ~&gt; 8.12</code> and <code>random ~&gt; 3.6</code> in <code>shared</code>; lock file has Windows and Linux checksums. The PR plan was run locally: both Cloud Build triggers are disabled since 23 Nov. Auth Proxy installed with <code>gcloud components install cloud-sql-proxy</code>. Billing has started (about $8–10 a month while running)</td></tr>
         <tr><td class="nw">22 Nov</td><td class="nw">Phase 0</td><td>Local proof done on PostgreSQL 16.16 in Docker: schema, seed, batches 1–3 each match their expected file, pytest 10/10</td><td>—</td><td>Port 5432 was taken by a local PostgreSQL service, so the container ran on <code>-p 5434:5432</code> with <code>PG_PORT=5434</code></td></tr>
         <tr><td class="nw">22 Nov</td><td class="nw">0.6</td><td>Simulator scripted mode: <code>seed</code>, <code>batch --n 1..3</code>, <code>expected/batch_1..3.json</code>, pytest (10 tests). Seed and batches run twice on a fresh database give identical results</td><td><code>simulator/</code></td><td>Seed rebuilds the batch in memory and checks MD5s instead of reading the bucket (10.3). Batch 1 writes 50 history rows, not 40 (10.4). <code>store_access</code> waits for 0.7. CI's pytest step doesn't include <code>simulator/</code> yet, and would need read access to the Phase 1 Artifact Registry. <code>PG_INSTANCE</code> (Cloud SQL connector) comes with A3/A8</td></tr>
         <tr><td class="nw">22 Nov</td><td class="nw">0.6</td><td>Generator vendored from <code>data-gen-upload-data-lake-poc</code> at <code>4edc2ba</code>, SHA-256 <code>9d9b747d…3f24</code></td><td><code>simulator/vendor/</code></td><td>A test fails if the copy changes</td></tr>
@@ -2263,10 +2267,11 @@ terraform apply a1.tfplan            # from a laptop until CD (E2) applies on me
           <script type="text/plain" class="code" data-lang="bash" data-tag="sug">gcloud sql instances describe poc-ops-db \
   --format="yaml(state, databaseVersion, settings.tier, settings.databaseFlags, settings.ipConfiguration.sslMode, settings.ipConfiguration.authorizedNetworks)"</script></div></li>
         <li><input type="checkbox" id="rb-p1-5"><div class="sb"><label for="rb-p1-5">Connect through the Auth Proxy and check the WAL level</label>
-          <script type="text/plain" class="code" data-lang="bash" data-tag="sug">cloud-sql-proxy gks-datalake-poc2-dev:us-central1:poc-ops-db --port 5433 &
-export PGHOST=127.0.0.1 PGPORT=5433 PGDATABASE=g2 PGUSER=postgres
-export PGPASSWORD="$(gcloud secrets versions access latest --secret=poc-ops-db-postgres)"
-psql -c "SHOW wal_level;"            # logical</script></div></li>
+          <script type="text/plain" class="code" data-lang="bash" data-tag="sug">gcloud components install cloud-sql-proxy   # once
+cloud-sql-proxy gks-datalake-poc2-dev:us-central1:poc-ops-db --port 5433 &
+PGPASSWORD="$(gcloud secrets versions access latest --secret=poc-ops-db-postgres)"   psql "host=127.0.0.1 port=5433 dbname=g2 user=postgres" -c "SHOW wal_level;"   # logical
+kill %1                                      # stop the proxy</script>
+          <p class="small muted">As run on 23 Nov: the password goes straight into <code>psql</code> on one line instead of an exported variable, so it isn't left in the shell. Port 5433 because 5432 (local PostgreSQL) and 5434 (Docker <code>g2pg</code>) are taken.</p></div></li>
       </ol>
       <div class="verify"><b>Verify</b>
         <ul class="bul small"><li><code>state: RUNNABLE</code>, <code>POSTGRES_16</code>, flag <code>cloudsql.logical_decoding: on</code>, <code>sslMode: ENCRYPTED_ONLY</code>.</li><li>One authorised network per Datastream static IP.</li><li><code>wal_level</code> is <code>logical</code>.</li></ul></div>
@@ -2928,7 +2933,9 @@ gcloud pubsub subscriptions pull poc-case-events-dlq-sub --limit=5</script>
       <tr><td>Datastream metadata</td><td>Real field names, <code>change_type</code> values, whether updates come as pairs, whether <code>change_sequence_number</code> sorts as text</td><td><span class="pill ver">Verify · A4</span></td><td>A10</td></tr>
       <tr><td>Datastream SSL</td><td>Whether the connection profile needs an explicit SSL setting with the provider version in use</td><td><span class="pill ver">Verify · A4</span></td><td>A4</td></tr>
       <tr><td>Slot creation rights</td><td>Whether <code>postgres</code> needs <code>REPLICATION</code> before creating the slot in Cloud SQL</td><td><span class="pill ver">Verify · A2</span></td><td>A2</td></tr>
-      <tr><td>Admin secret</td><td>A third secret, <code>poc-ops-db-postgres</code>, for the bootstrap user</td><td><span class="pill sug">Suggested</span></td><td>A1, A2</td></tr>
+      <tr><td>Admin secret</td><td>A third secret, <code>poc-ops-db-postgres</code>, for the bootstrap user</td><td><span class="pill plan">Decided · 23 Nov</span> created in A1</td><td>A1, A2</td></tr>
+      <tr><td>CI plan and secret reads</td><td>Once the triggers are back on, the PR plan (as <code>sa-cloudbuild</code>, read-only) refreshes <code>google_secret_manager_secret_version</code>, which reads the secret value. Expect a permission error; decide the grant with Dev 4 instead of widening the role blindly</td><td><span class="pill ver">Verify · E1</span></td><td>A1, E1</td></tr>
+      <tr><td>Alert email</td><td><code>alert_email</code> is empty, so every <code>shared</code> plan warns and the alert policies notify nobody</td><td><span class="pill open">Open · Dev 4</span></td><td>E7</td></tr>
       <tr><td>Avro JSON encoding</td><td>Wrapped (<code>{"string": …}</code>) or plain values for nullable fields</td><td><span class="pill ver">Verify · A6</span></td><td>A7</td></tr>
       <tr><td>DQ44</td><td>Check for case events naming an unknown store (about 1% planted)</td><td><span class="pill open">To do · T1</span></td><td>C10, C7</td></tr>
       <tr><td><code>derived_alert</code> reader</td><td>A story table reads it, or it's documented as source-only</td><td><span class="pill open">Open · T2</span></td><td>A9, C10</td></tr>
