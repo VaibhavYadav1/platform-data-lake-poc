@@ -1,0 +1,380 @@
+# poc-micro-batch-<env> (E4): one pipeline cycle.
+#
+#   init -> ensure_log_table -> single_run -> load_crm -> freshness_src -> build_publish -> freshness
+#
+# Every step writes a row to ops_<env>.pipeline_run_steps (status, error, started_at, finished_at),
+# so the run time of each step is measurable (the whole cycle must stay under 4 minutes).
+#
+# The dbt work runs in the Cloud Run job poc-dbt-runner-<env> (E3): `microbatch` is dbt build and,
+# only if dbt exited 0, publish.py (E5). The job has max_retries = 0; this workflow decides what a
+# failure means:
+#   - load_crm, build_publish, freshness: a failure fails the workflow (so the "failed poc-*
+#     workflow" alert fires), after the failed step is logged;
+#   - freshness_src: warn only. A stale source is reported, it does not stop the build.
+#
+# single_run: if an older execution of this workflow is still ACTIVE, this one logs SKIPPED and
+# returns. The oldest active execution always runs, so two overlapping runs never both skip.
+#
+# Settings: Terraform sets the environment variables POC_ENV and POC_RUN_CRM_LOADER on each
+# workflow (dev runs the CRM loader, int does not). A caller can override any of them in args.
+#
+# Run by hand:  gcloud workflows run poc-micro-batch-dev --location us-central1 --data='{}'
+# Arguments (all optional):
+#   env, location, run_crm_loader (bool), run_freshness (bool), dbt_job, crm_job,
+#   dbt_timeout_seconds, crm_timeout_seconds
+main:
+  params: [args]
+  steps:
+    - init_args:
+        assign:
+          - cfg: {}
+    - merge_args:
+        switch:
+          - condition: ${args != null}
+            assign:
+              - cfg: ${args}
+    - init:
+        assign:
+          - started: ${sys.now()}
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - location: ${default(map.get(cfg, "location"), "us-central1")}
+          # "env" is a reserved word in Workflows, so the variable is env_name.
+          - env_name: ${default(map.get(cfg, "env"), sys.get_env("POC_ENV", "dev"))}
+          - run_crm_loader: ${default(map.get(cfg, "run_crm_loader"), sys.get_env("POC_RUN_CRM_LOADER", "false") == "true")}
+          - run_freshness: ${default(map.get(cfg, "run_freshness"), true)}
+          - dbt_job: ${default(map.get(cfg, "dbt_job"), "poc-dbt-runner-" + env_name)}
+          - crm_job: ${default(map.get(cfg, "crm_job"), "poc-crm-loader")}
+          # The dbt job's own timeout is 15 minutes; wait a little longer than that.
+          - dbt_timeout_seconds: ${default(map.get(cfg, "dbt_timeout_seconds"), 1200)}
+          - crm_timeout_seconds: ${default(map.get(cfg, "crm_timeout_seconds"), 900)}
+          - workflow_id: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_ID")}
+          - run_id: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+          - ctx:
+              project_id: ${project_id}
+              location: ${location}
+              run_id: ${run_id}
+              ops_dataset: ${"ops_" + env_name}
+              table_id: "pipeline_run_steps"
+
+    - ensure_log_table:
+        call: ensure_log_table
+        args:
+          ctx: ${ctx}
+
+    # ---- single_run -------------------------------------------------------------------------
+    - list_active:
+        call: googleapis.workflowexecutions.v1.projects.locations.workflows.executions.list
+        args:
+          parent: ${"projects/" + project_id + "/locations/" + location + "/workflows/" + workflow_id}
+          filter: state="ACTIVE"
+          orderBy: "createTime asc"
+          pageSize: 20
+        result: active
+    - read_active:
+        assign:
+          - executions: ${default(map.get(active, "executions"), [])}
+          - oldest_name: ${run_id}
+    - pick_oldest:
+        switch:
+          - condition: ${len(executions) > 0}
+            assign:
+              - oldest_name: ${executions[0].name}
+    - split_oldest:
+        assign:
+          - name_parts: ${text.split(oldest_name, "/")}
+          - oldest_id: ${name_parts[len(name_parts) - 1]}
+    - single_run:
+        switch:
+          - condition: ${oldest_id != run_id}
+            steps:
+              - log_skipped:
+                  call: log_step
+                  args:
+                    ctx: ${ctx}
+                    step_order: 1
+                    step: "single_run"
+                    entity: ${workflow_id}
+                    status: "SKIPPED"
+                    error: ${"older execution " + oldest_id + " is still ACTIVE"}
+                    started: ${started}
+              - return_skipped:
+                  return:
+                    run_id: ${run_id}
+                    status: "SKIPPED"
+                    active_execution: ${oldest_id}
+    - log_single_run:
+        call: log_step
+        args:
+          ctx: ${ctx}
+          step_order: 1
+          step: "single_run"
+          entity: "no other run active"
+          status: "SUCCESS"
+          error: null
+          started: ${started}
+
+    # ---- load_crm ---------------------------------------------------------------------------
+    - load_crm:
+        switch:
+          - condition: ${run_crm_loader}
+            steps:
+              - run_crm_loader_job:
+                  call: run_job
+                  args:
+                    ctx: ${ctx}
+                    job: ${crm_job}
+                    job_args: null
+                    timeout: ${crm_timeout_seconds}
+                    step_order: 2
+                    step: "load_crm"
+                    warn_only: false
+          - condition: true
+            steps:
+              - log_load_crm_skipped:
+                  call: log_step
+                  args:
+                    ctx: ${ctx}
+                    step_order: 2
+                    step: "load_crm"
+                    entity: ${crm_job}
+                    status: "SKIPPED"
+                    error: "run_crm_loader is false"
+                    started: ${sys.now()}
+
+    # ---- freshness_src: warn only -----------------------------------------------------------
+    - freshness_src:
+        call: run_job
+        args:
+          ctx: ${ctx}
+          job: ${dbt_job}
+          job_args: ["dbt", "source", "freshness", "--target", "${env_name}"]
+          timeout: ${dbt_timeout_seconds}
+          step_order: 3
+          step: "freshness_src"
+          warn_only: true
+
+    # ---- build_publish: dbt build, then publish.py if dbt exited 0 --------------------------
+    - build_publish:
+        call: run_job
+        args:
+          ctx: ${ctx}
+          job: ${dbt_job}
+          job_args: ["microbatch"]
+          timeout: ${dbt_timeout_seconds}
+          step_order: 4
+          step: "build_publish"
+          warn_only: false
+
+    # ---- freshness --------------------------------------------------------------------------
+    - freshness:
+        switch:
+          - condition: ${run_freshness}
+            steps:
+              - run_freshness_check:
+                  call: run_job
+                  args:
+                    ctx: ${ctx}
+                    job: ${dbt_job}
+                    job_args: ["dbt", "run-operation", "freshness_check", "--target", "${env_name}"]
+                    timeout: ${dbt_timeout_seconds}
+                    step_order: 5
+                    step: "freshness"
+                    warn_only: false
+          - condition: true
+            steps:
+              - log_freshness_skipped:
+                  call: log_step
+                  args:
+                    ctx: ${ctx}
+                    step_order: 5
+                    step: "freshness"
+                    entity: ${dbt_job}
+                    status: "SKIPPED"
+                    error: "run_freshness is false"
+                    started: ${sys.now()}
+
+    # ---- the whole cycle: its duration is the number to keep under 4 minutes ----------------
+    - log_run_total:
+        call: log_step
+        args:
+          ctx: ${ctx}
+          step_order: 99
+          step: "run_total"
+          entity: ${workflow_id}
+          status: "SUCCESS"
+          error: null
+          started: ${started}
+    - done:
+        return:
+          run_id: ${run_id}
+          env: ${env_name}
+          status: "SUCCESS"
+          seconds: ${sys.now() - started}
+
+
+# =================================================================
+# Subworkflow: run a Cloud Run job with container arguments, wait for it, log the step.
+# warn_only: a failure is logged as WARNING and the workflow goes on; otherwise it is logged as
+# FAILED and the error is raised, which fails the workflow.
+# =================================================================
+run_job:
+  params: [ctx, job, job_args, timeout, step_order, step, warn_only]
+  steps:
+    - start:
+        assign:
+          - started: ${sys.now()}
+          - run_body: {}
+    - add_overrides:
+        switch:
+          - condition: ${job_args != null}
+            assign:
+              - run_body:
+                  overrides:
+                    containerOverrides:
+                      - args: ${job_args}
+    - run:
+        try:
+          call: googleapis.run.v2.projects.locations.jobs.run
+          args:
+            name: ${"projects/" + ctx.project_id + "/locations/" + ctx.location + "/jobs/" + job}
+            body: ${run_body}
+            # The call waits for the execution to finish and raises if it failed.
+            connector_params:
+              timeout: ${timeout}
+          result: execution
+        except:
+          as: e
+          steps:
+            - log_failure:
+                call: log_step
+                args:
+                  ctx: ${ctx}
+                  step_order: ${step_order}
+                  step: ${step}
+                  entity: ${job}
+                  status: ${if(warn_only, "WARNING", "FAILED")}
+                  error: ${default(map.get(e, "message"), "unknown error")}
+                  started: ${started}
+            - warn_and_go_on:
+                switch:
+                  - condition: ${warn_only}
+                    return: "WARNING"
+            - raise_failure:
+                raise: ${e}
+    - log_success:
+        call: log_step
+        args:
+          ctx: ${ctx}
+          step_order: ${step_order}
+          step: ${step}
+          entity: ${job}
+          status: "SUCCESS"
+          error: null
+          started: ${started}
+    - finished:
+        return: "SUCCESS"
+
+
+# =================================================================
+# Subworkflow: create ops_<env>.pipeline_run_steps when it does not exist yet.
+# A 404 from get means "missing" and triggers the insert; any other error is raised. The ops
+# dataset itself comes from Terraform (bq_env); if it is missing the insert fails with a 404 too.
+# =================================================================
+ensure_log_table:
+  params: [ctx]
+  steps:
+    - get_table:
+        try:
+          call: googleapis.bigquery.v2.tables.get
+          args:
+            projectId: ${ctx.project_id}
+            datasetId: ${ctx.ops_dataset}
+            tableId: ${ctx.table_id}
+        except:
+          as: tbl_err
+          steps:
+            - table_missing_switch:
+                switch:
+                  - condition: ${map.get(tbl_err, "code") == 404}
+                    steps:
+                      - create_table:
+                          call: googleapis.bigquery.v2.tables.insert
+                          args:
+                            projectId: ${ctx.project_id}
+                            datasetId: ${ctx.ops_dataset}
+                            body:
+                              tableReference:
+                                projectId: ${ctx.project_id}
+                                datasetId: ${ctx.ops_dataset}
+                                tableId: ${ctx.table_id}
+                              timePartitioning:
+                                type: DAY
+                                field: finished_at
+                              schema:
+                                fields:
+                                  - {name: run_id, type: STRING, mode: REQUIRED}
+                                  - {name: step_order, type: INTEGER, mode: REQUIRED}
+                                  - {name: step, type: STRING, mode: REQUIRED}
+                                  - {name: entity, type: STRING, mode: NULLABLE}
+                                  - {name: status, type: STRING, mode: REQUIRED}
+                                  - {name: error, type: STRING, mode: NULLABLE}
+                                  - {name: started_at, type: TIMESTAMP, mode: REQUIRED}
+                                  - {name: finished_at, type: TIMESTAMP, mode: REQUIRED}
+                      - table_created:
+                          return: "created"
+            - raise_table_error:
+                raise: ${tbl_err}
+    - ensure_done:
+        return: "ok"
+
+
+# =================================================================
+# Subworkflow: write one row to ops_<env>.pipeline_run_steps.
+# A logging problem is written to the workflow log and never fails the pipeline.
+# =================================================================
+log_step:
+  params: [ctx, step_order, step, entity, status, error, started]
+  steps:
+    - build_row:
+        assign:
+          - row:
+              run_id: ${ctx.run_id}
+              step_order: ${step_order}
+              step: ${step}
+              entity: ${entity}
+              status: ${status}
+              error: ${error}
+              started_at: ${time.format(started, "UTC")}
+              finished_at: ${time.format(sys.now(), "UTC")}
+    - stream_to_bigquery:
+        try:
+          steps:
+            - insert_row:
+                call: googleapis.bigquery.v2.tabledata.insertAll
+                args:
+                  projectId: ${ctx.project_id}
+                  datasetId: ${ctx.ops_dataset}
+                  tableId: ${ctx.table_id}
+                  body:
+                    rows:
+                      - json: ${row}
+                result: bq_insert_response
+            - check_insert_errors:
+                switch:
+                  - condition: ${default(map.get(bq_insert_response, "insertErrors"), null) != null}
+                    steps:
+                      - log_bq_error:
+                          call: sys.log
+                          args:
+                            severity: ERROR
+                            text: '${"BigQuery rejected the row for step " + step + ": " + json.encode_to_string(bq_insert_response.insertErrors)}'
+        except:
+          as: insert_err
+          steps:
+            - log_stream_failure:
+                call: sys.log
+                args:
+                  severity: ERROR
+                  text: '${"Failed to write step " + step + " to pipeline_run_steps: " + default(map.get(insert_err, "message"), "unknown error")}'
+    - finish_logging:
+        return: "done"

@@ -1,0 +1,209 @@
+# poc-morning-on (E8): start the pipeline in the morning.
+#
+# Order matters:
+#   1. Start Cloud SQL and wait until it is RUNNABLE.
+#   2. Resume the Datastream stream.
+#   3. Resume the simulator.
+#   4. Wait 5 minutes, then resume the micro-batch and watchdog jobs, so the first freshness
+#      check already sees new data.
+#
+# Safe to re-run: starting or resuming something already running is a no-op.
+#
+# Run by hand:  gcloud workflows run poc-morning-on --location us-central1 --data='{}'
+# Arguments (all optional, defaults below; the Cloud Scheduler job passes them from Terraform):
+#   location, sql_instance, stream_id, simulator_jobs, delayed_jobs, delay_seconds,
+#   wait_seconds, wait_polls
+main:
+  params: [args]
+  steps:
+    - init_args:
+        assign:
+          - cfg: {}
+    - merge_args:
+        switch:
+          - condition: ${args != null}
+            assign:
+              - cfg: ${args}
+    - init:
+        assign:
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - location: ${default(map.get(cfg, "location"), "us-central1")}
+          - sql_instance: ${default(map.get(cfg, "sql_instance"), "poc-ops-db")}
+          - stream_id: ${default(map.get(cfg, "stream_id"), "poc-cdc-stream")}
+          - simulator_jobs: ${default(map.get(cfg, "simulator_jobs"), ["poc-simulator"])}
+          - delayed_jobs: ${default(map.get(cfg, "delayed_jobs"), ["poc-micro-batch-dev", "poc-micro-batch-int", "poc-watchdog"])}
+          - delay_seconds: ${default(map.get(cfg, "delay_seconds"), 300)}
+          - wait_seconds: ${default(map.get(cfg, "wait_seconds"), 15)}
+          - wait_polls: ${default(map.get(cfg, "wait_polls"), 80)}
+          - stream_name: ${"projects/" + project_id + "/locations/" + location + "/streams/" + stream_id}
+
+    # ---- 1. Start Cloud SQL and wait until it is runnable -------------------------------------
+    - start_sql:
+        call: googleapis.sqladmin.v1.instances.patch
+        args:
+          project: ${project_id}
+          instance: ${sql_instance}
+          body:
+            settings:
+              activationPolicy: "ALWAYS"
+    - wait_sql_runnable:
+        call: wait_for_sql_state
+        args:
+          project_id: ${project_id}
+          instance: ${sql_instance}
+          wanted: "RUNNABLE"
+          max_polls: ${wait_polls}
+          interval_s: ${wait_seconds}
+    - log_sql_up:
+        call: sys.log
+        args:
+          severity: INFO
+          json: {event: "morning_on_sql_runnable", sql_instance: "${sql_instance}"}
+
+    # ---- 2. Resume the stream, then check it is running ---------------------------------------
+    - resume_stream:
+        call: set_stream_state
+        args:
+          stream_name: ${stream_name}
+          wanted: "RUNNING"
+          also_ok: []
+          max_polls: ${wait_polls}
+          interval_s: ${wait_seconds}
+    - log_stream_resumed:
+        call: sys.log
+        args:
+          severity: INFO
+          json: {event: "morning_on_stream_resumed", stream: "${stream_id}"}
+
+    # ---- 3. Resume the simulator --------------------------------------------------------------
+    - resume_simulator:
+        call: resume_jobs
+        args:
+          project_id: ${project_id}
+          location: ${location}
+          jobs: ${simulator_jobs}
+
+    # ---- 4. Wait, then resume micro-batch and watchdog ----------------------------------------
+    - wait_for_first_data:
+        call: sys.sleep
+        args:
+          seconds: ${delay_seconds}
+    - resume_delayed:
+        call: resume_jobs
+        args:
+          project_id: ${project_id}
+          location: ${location}
+          jobs: ${delayed_jobs}
+    - log_done:
+        call: sys.log
+        args:
+          severity: INFO
+          json: {event: "morning_on_done"}
+    - done:
+        return: "morning-on complete"
+
+# Workflows has no Datastream connector, so this calls the REST API. The PATCH starts a
+# long-running operation; the stream's own state tells us when it has finished.
+set_stream_state:
+  params: [stream_name, wanted, also_ok, max_polls, interval_s]
+  steps:
+    - init:
+        assign:
+          - polls: 0
+          - url: ${"https://datastream.googleapis.com/v1/" + stream_name}
+    - patch:
+        call: http.patch
+        args:
+          url: ${url}
+          query:
+            updateMask: "state"
+          body:
+            state: ${wanted}
+          auth:
+            type: OAuth2
+    - poll:
+        call: http.get
+        args:
+          url: ${url}
+          auth:
+            type: OAuth2
+        result: resp
+    - check:
+        switch:
+          - condition: ${resp.body.state == wanted or resp.body.state in also_ok}
+            return: ${resp.body.state}
+          - condition: ${polls >= max_polls}
+            raise: ${"Stream " + stream_name + " is " + resp.body.state + ", expected " + wanted}
+    - wait:
+        call: sys.sleep
+        args:
+          seconds: ${interval_s}
+    - bump:
+        assign:
+          - polls: ${polls + 1}
+    - again:
+        next: poll
+
+resume_jobs:
+  params: [project_id, location, jobs]
+  steps:
+    - each_job:
+        for:
+          value: job
+          in: ${jobs}
+          steps:
+            - resume_one_job:
+                try:
+                  call: googleapis.cloudscheduler.v1.projects.locations.jobs.resume
+                  args:
+                    name: ${"projects/" + project_id + "/locations/" + location + "/jobs/" + job}
+                except:
+                  as: e
+                  steps:
+                    # A job that doesn't exist yet (for example int, before E9) is not an error.
+                    - job_missing_or_fail:
+                        switch:
+                          - condition: ${map.get(e, "code") == 404}
+                            next: warn_missing
+                    - fail_job:
+                        raise: ${e}
+                    - warn_missing:
+                        call: sys.log
+                        args:
+                          severity: WARNING
+                          json: {event: "morning_on_job_missing", job: "${job}"}
+                        next: continue
+            - log_job_resumed:
+                call: sys.log
+                args:
+                  severity: INFO
+                  json: {event: "morning_on_job_resumed", job: "${job}"}
+
+# Polls the instance until it reaches the wanted state, or raises after max_polls tries.
+wait_for_sql_state:
+  params: [project_id, instance, wanted, max_polls, interval_s]
+  steps:
+    - init:
+        assign:
+          - polls: 0
+    - poll:
+        call: googleapis.sqladmin.v1.instances.get
+        args:
+          project: ${project_id}
+          instance: ${instance}
+        result: inst
+    - check:
+        switch:
+          - condition: ${inst.state == wanted}
+            return: ${inst.state}
+          - condition: ${polls >= max_polls}
+            raise: ${"Timed out waiting for " + instance + " to be " + wanted + ", last state " + inst.state}
+    - wait:
+        call: sys.sleep
+        args:
+          seconds: ${interval_s}
+    - bump:
+        assign:
+          - polls: ${polls + 1}
+    - again:
+        next: poll

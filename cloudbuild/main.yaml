@@ -1,0 +1,103 @@
+# E2: deploy on every merge to main, with no manual step.
+#
+# Order matters: images first, then Terraform, so the Cloud Run jobs point at an image that
+# already exists. Terraform applies shared, then dev, then int (once int.tfvars exists).
+#
+# Trigger: pushes to main, created in terraform/shared/cloudbuild_main.tf.
+# Images are tagged with the commit SHA, so every run traces back to its code.
+# Terraform receives the tag as TF_VAR_image_tag (ignored until a module declares it, E3).
+#
+# Steps whose input isn't merged yet (Dockerfiles, int files) print SKIPPED and pass.
+# Still to add: dbt docs generate and copy to the docs bucket (E10, Day 10).
+
+substitutions:
+  _TF_IMAGE: hashicorp/terraform:1.17
+  _REGION: us-central1
+  _REPO: poc # Artifact Registry repository, created in terraform/shared/cloudbuild_main.tf
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 1800s
+
+steps:
+  # ------------------------------------------------------------------- Images
+  - id: image-dbt-runner
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f dbt/Dockerfile ]; then
+          echo "SKIPPED image-dbt-runner: dbt/Dockerfile not merged yet (E3)"; exit 0
+        fi
+        img=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/dbt-runner
+        # Context is the repo root: the image copies dbt/ and orchestration/publish/
+        docker build -f dbt/Dockerfile -t "$$img:$COMMIT_SHA" -t "$$img:latest" .
+        docker push "$$img" --all-tags
+
+  - id: image-crm-loader
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f loaders/crm/Dockerfile ]; then
+          echo "SKIPPED image-crm-loader: loaders/crm/Dockerfile not merged yet (B3)"; exit 0
+        fi
+        img=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/crm-loader
+        docker build -f loaders/crm/Dockerfile -t "$$img:$COMMIT_SHA" -t "$$img:latest" loaders/crm
+        docker push "$$img" --all-tags
+
+  # ---------------------------------------------------------------- Terraform
+  # Sequential: shared first, because the environments depend on it. A lock timeout lets two
+  # quick merges queue behind each other on the state lock instead of failing.
+  - id: apply-shared
+    name: ${_TF_IMAGE}
+    waitFor: [image-dbt-runner, image-crm-loader]
+    dir: terraform/shared
+    entrypoint: sh
+    env: ["TF_VAR_image_tag=$COMMIT_SHA"]
+    args:
+      - -c
+      - |
+        set -eu
+        terraform init -input=false -backend-config=backend.hcl
+        terraform apply -input=false -auto-approve -lock-timeout=300s -var-file=terraform.tfvars
+
+  - id: apply-dev
+    name: ${_TF_IMAGE}
+    waitFor: [apply-shared]
+    dir: terraform/env
+    entrypoint: sh
+    env: ["TF_VAR_image_tag=$COMMIT_SHA"]
+    args:
+      - -c
+      - |
+        set -eu
+        terraform init -input=false -backend-config=dev.backend.hcl
+        terraform apply -input=false -auto-approve -lock-timeout=300s -var-file=dev.tfvars
+
+  # int: the same commit as dev. Added from Day 9 (E9); skipped until its files exist.
+  - id: apply-int
+    name: ${_TF_IMAGE}
+    waitFor: [apply-dev]
+    dir: terraform/env
+    entrypoint: sh
+    env: ["TF_VAR_image_tag=$COMMIT_SHA"]
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f int.tfvars ] || [ ! -f int.backend.hcl ]; then
+          echo "SKIPPED apply-int: int.tfvars / int.backend.hcl not written yet (E9)"; exit 0
+        fi
+        # dev and int use different state, so start from a clean init
+        rm -rf .terraform
+        terraform init -input=false -reconfigure -backend-config=int.backend.hcl
+        terraform apply -input=false -auto-approve -lock-timeout=300s -var-file=int.tfvars
