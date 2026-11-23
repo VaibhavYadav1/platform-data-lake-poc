@@ -43,6 +43,7 @@ resource "google_storage_bucket_iam_member" "cloudbuild_deploy_state" {
 }
 
 resource "google_cloudbuild_trigger" "main_deploy" {
+  disabled    = var.cloudbuild_triggers_disabled
   project     = var.project_id
   name        = "poc-main-deploy"
   description = "E2: build images and terraform apply (shared, dev, int) on every merge to main"

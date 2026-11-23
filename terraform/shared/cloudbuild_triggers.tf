@@ -17,7 +17,15 @@ variable "github_repo" {
   default     = "platform-data-lake-poc"
 }
 
+variable "cloudbuild_triggers_disabled" {
+  description = "Disable both Cloud Build triggers (poc-pr-checks and poc-main-deploy). True: neither pull requests nor merges start a build. Set to false to turn CI and CD back on."
+  type        = bool
+  default     = true
+}
+
 resource "google_cloudbuild_trigger" "pr_checks" {
+  disabled = var.cloudbuild_triggers_disabled
+
   project     = var.project_id
   name        = "poc-pr-checks"
   description = "E1: Terraform, pytest, rule checks and dbt CI on every pull request to main"
