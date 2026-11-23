@@ -1,0 +1,66 @@
+{
+  "batch": 2,
+  "changes": {
+    "closed": [
+      "INC910247",
+      "INC910444",
+      "INC910518",
+      "INC910524",
+      "INC910529",
+      "INC910531",
+      "INC910533",
+      "INC910536",
+      "INC910538",
+      "INC910544",
+      "INC910548",
+      "INC910562",
+      "INC910564",
+      "INC910565",
+      "INC910567"
+    ],
+    "deleted": [
+      "INC910329",
+      "INC910377",
+      "INC910456"
+    ],
+    "deleted_history_rows": 6,
+    "moved_device": {
+      "device_id": "D125",
+      "from_store": "S138",
+      "to_store": "S115"
+    },
+    "history_rows_inserted": 15
+  },
+  "state": {
+    "rows": {
+      "brands": 4,
+      "teams": 5,
+      "statuses": 7,
+      "alert_types": 11,
+      "users": 18,
+      "stores": 41,
+      "device_locations": 133,
+      "alert_incidents": 467,
+      "alert_history": 1549,
+      "store_access": 0,
+      "heartbeat": 3
+    },
+    "incidents": {
+      "open": 60,
+      "closed": 407
+    },
+    "fingerprints": {
+      "brands": "663ee237968b676e59388463d268a573",
+      "teams": "a556a85c62d3c56f04edb5596bcdd0a1",
+      "statuses": "377f5cd59112ccac07a7994993c43dc2",
+      "alert_types": "443c9a45103df4b5bf763ea7b53cfb33",
+      "users": "f3c2bb241f8440db9e83d0b3e4b0f6ee",
+      "stores": "8f289968ec1e5182d301391721892941",
+      "device_locations": "1d39a6b7be703fc2762b49f09b63b3ab",
+      "alert_incidents": "130101d5c7f5423002e3fc62b0bdad8f",
+      "alert_history": "c1ab16dd56246b01bd3b96cb7492514a",
+      "store_access": "",
+      "heartbeat": "bb7c683c295e414648853ccf8ea5d18e"
+    }
+  }
+}

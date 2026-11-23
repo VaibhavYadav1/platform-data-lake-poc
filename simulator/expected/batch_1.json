@@ -1,0 +1,72 @@
+{
+  "batch": 1,
+  "changes": {
+    "inserted": [
+      "INC910551",
+      "INC910552",
+      "INC910553",
+      "INC910554",
+      "INC910555",
+      "INC910556",
+      "INC910557",
+      "INC910558",
+      "INC910559",
+      "INC910560",
+      "INC910561",
+      "INC910562",
+      "INC910563",
+      "INC910564",
+      "INC910565",
+      "INC910566",
+      "INC910567",
+      "INC910568",
+      "INC910569",
+      "INC910570"
+    ],
+    "acknowledged": [
+      "INC910442",
+      "INC910457",
+      "INC910468",
+      "INC910476",
+      "INC910501",
+      "INC910518",
+      "INC910523",
+      "INC910530",
+      "INC910538",
+      "INC910541"
+    ],
+    "history_rows_inserted": 50
+  },
+  "state": {
+    "rows": {
+      "brands": 4,
+      "teams": 5,
+      "statuses": 7,
+      "alert_types": 11,
+      "users": 18,
+      "stores": 41,
+      "device_locations": 133,
+      "alert_incidents": 470,
+      "alert_history": 1540,
+      "store_access": 0,
+      "heartbeat": 2
+    },
+    "incidents": {
+      "open": 75,
+      "closed": 395
+    },
+    "fingerprints": {
+      "brands": "663ee237968b676e59388463d268a573",
+      "teams": "a556a85c62d3c56f04edb5596bcdd0a1",
+      "statuses": "377f5cd59112ccac07a7994993c43dc2",
+      "alert_types": "443c9a45103df4b5bf763ea7b53cfb33",
+      "users": "f3c2bb241f8440db9e83d0b3e4b0f6ee",
+      "stores": "8f289968ec1e5182d301391721892941",
+      "device_locations": "670cf6d8f96b6b6d13c72b7a6f2e0d86",
+      "alert_incidents": "5b0e05687e3081d494eb341b4250b213",
+      "alert_history": "6a5334f3b883218f7a1e397f99ed606c",
+      "store_access": "",
+      "heartbeat": "410d720ce8d9dd8875ae1eb5196d4285"
+    }
+  }
+}

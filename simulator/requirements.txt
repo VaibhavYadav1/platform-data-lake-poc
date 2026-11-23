@@ -1,0 +1,10 @@
+# One index only: the Phase 1 Artifact Registry *virtual* repository serves data-lake-schema from python-libs and
+# everything else from PyPI, so a public package called data-lake-schema can never be installed instead of ours.
+# Authenticate first: pip install keyrings.google-artifactregistry-auth, and gcloud auth application-default login.
+--index-url https://us-central1-python.pkg.dev/data-lake-poc-512405/python/simple/
+
+# The vendored generator imports it. Same pin as data-gen-upload-data-lake-poc at 4edc2ba: a different version
+# could build different rows, and the seed would then refuse to load (MD5 check).
+data-lake-schema==1.0.0
+
+psycopg[binary]>=3.2,<4

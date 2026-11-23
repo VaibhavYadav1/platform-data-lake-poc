@@ -1,0 +1,45 @@
+version: 2
+
+seeds:
+  - name: entity_registry
+    description: >
+      Every entity and the freshness promise of each (E7). freshness_check measures the rows whose
+      checked_by is micro-batch; the watchdog workflow covers the heartbeat. The same promises sit in
+      each sources_<system>.yml (C12), and one test keeps the two in step.
+    config:
+      column_types:
+        promise_minutes: int64
+    columns:
+      - name: entity
+        description: Short name of the data type.
+        tests: [unique, not_null]
+      - name: source_system
+        description: Where the data comes from (g2, lpos, crm, g2_datalake).
+        tests: [not_null]
+      - name: measured_on
+        description: >
+          <layer>.<table>. The layers wh, sec, build and ops get the environment appended
+          (wh becomes wh_dev); the raw_* datasets are shared and used as written.
+        tests: [not_null]
+      - name: ts_column
+        description: Column holding the time the row last changed at the source.
+        tests: [not_null]
+      - name: sync_mode
+        description: cdc, stream or batch.
+        tests:
+          - accepted_values:
+              values: [cdc, stream, batch]
+      - name: promise_minutes
+        description: The newest row may be at most this many minutes old.
+        tests: [not_null]
+      - name: checked_by
+        description: micro-batch (freshness_check) or watchdog.
+        tests:
+          - accepted_values:
+              values: [micro-batch, watchdog]
+      - name: owner
+        description: Developer who answers when the promise is broken.
+      - name: partition_column
+        description: >
+          Partition column of a published fact, or empty. Facts in wh require a partition filter, so
+          freshness_check reads only the last 3 days of them.
