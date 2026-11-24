@@ -1,3 +1,11 @@
+> [!WARNING]
+> **Corrected 24 Nov (verification pass):** `docs/poc2/cdc.md` is the source of truth. In this file,
+> (1) `change_sequence_number` does **not** sort correctly as text, and `_seq DESC` must not be used for ordering
+> (cdc.md 4.5); (2) the ~15 s latency figures were not measured: the measured delay is ≤ about 6 s (cdc.md 5);
+> (3) "announce snapshot taken" was not done by this session; (4) `ops_dev` and the `g2_raw_dataset` dbt var don't
+> exist yet; (5) `raw_g2.g2_store_access` doesn't exist (no rows), so AT-15 must treat it as 0. The A5 steps are in the
+> POC A guide, phase 6.
+
 # Task A4 Completion & A5 Execution Plan Handoff
 
 > [!NOTE]
