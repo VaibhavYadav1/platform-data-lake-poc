@@ -2,8 +2,8 @@ with poc1 as (
   select s.id as store_id, s.name as store_name, s.number as store_number, s.fk_brand as brand_id, s.brand,
          b.is_active as brand_is_active, s.country, s.state, s.city, s.region, s.department, s.district,
          s.is_active, s.hierarchy_complete
-  from `{project}.poc1_baseline.dim_store` as s
-  left join `{project}.poc1_baseline.dim_brand` as b on b.id = s.fk_brand
+  from `{baseline_project}.poc1_baseline.dim_store` as s
+  left join `{baseline_project}.poc1_baseline.dim_brand` as b on b.id = s.fk_brand
 ),
 p2 as (
   select store_id, store_name, store_number, brand_id, brand, brand_is_active, country, state, city, region,

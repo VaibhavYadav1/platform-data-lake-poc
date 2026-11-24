@@ -1,7 +1,7 @@
 with poc1 as (
   select id as history_id, fk_alert_incident as incident_id, changed_date as event_time, change_type,
          fk_previous_status as previous_status_id, fk_new_status as new_status_id
-  from `{project}.poc1_baseline.fct_alert_history`
+  from `{baseline_project}.poc1_baseline.fct_alert_history`
 ),
 p2 as (
   select history_id, incident_id, event_time, change_type, previous_status_id, new_status_id

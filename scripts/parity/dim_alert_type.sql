@@ -1,7 +1,7 @@
 with poc1 as (
   select id as alert_type_id, alert_name, alert_description, customer_alert_name, category_name,
          customer_category_name, severity, device_type, system_type, customer_facing, default_priority, is_active
-  from `{project}.poc1_baseline.dim_alert_type`
+  from `{baseline_project}.poc1_baseline.dim_alert_type`
 ),
 p2 as (
   select alert_type_id, alert_name, alert_description, customer_alert_name, category_name,

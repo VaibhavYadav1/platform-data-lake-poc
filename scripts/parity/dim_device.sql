@@ -1,6 +1,6 @@
 with poc1 as (
   select id as device_id, fk_store as store_id, installed_location, type as device_type, main_door_indicator, location_class
-  from `{project}.poc1_baseline.dim_device`
+  from `{baseline_project}.poc1_baseline.dim_device`
 ),
 p2 as (
   select device_id, store_id, installed_location, device_type, main_door_indicator, location_class
