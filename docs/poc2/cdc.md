@@ -26,6 +26,9 @@ The bootstrap caught the permission error, ran `ALTER ROLE postgres WITH REPLICA
 deliver those rows twice: once from the backfill and once as change events. Staging keeps one row per key, so it is
 harmless, but record what actually arrives.
 
+**After the seed (A3, 24 Nov 2026):** 2,160 rows in `g2` (baseline 2,157 plus `S999`, `D999` and the `heartbeat`
+row), `store_access` empty. The slot held 960 kB of WAL. Don't change G2 until the A4 parity snapshot is taken.
+
 **WAL held by the slot** (check before A4; must stay small while nothing reads the slot):
 
 ```sql

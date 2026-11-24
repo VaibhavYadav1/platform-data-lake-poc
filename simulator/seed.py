@@ -112,6 +112,11 @@ def seed(conn, batch_name, reset=False, local=False, log=print):
             if not local:
                 raise SeedError("--reset is for a local database only: re-seeding Cloud SQL after the stream "
                                 "exists sends every old row to raw_g2 as a delete (A3 pitfall)")
+            # Through the Auth Proxy, Cloud SQL's host is 127.0.0.1 and looks local: ask the server itself.
+            cur.execute("SELECT 1 FROM pg_roles WHERE rolname = 'cloudsqlsuperuser'")
+            if cur.fetchone():
+                raise SeedError("--reset refused: this server is Cloud SQL (reached through the Auth Proxy)")
+
             cur.execute(f"TRUNCATE {', '.join(f'{SCHEMA}.{t}' for t in ALL_TABLES)}")
             log("Emptied all 11 tables (--reset)")
         for table, columns in SOURCE_COLUMNS.items():
