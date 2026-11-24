@@ -17,9 +17,11 @@ Scripted mode (`seed`, `batch --n 1..3`) for repeatable tests; continuous mode (
 | Case-event publisher | A7 | Not started |
 | Dockerfile, `tick`, heartbeat, pause switch, `RATE` | A8 | Not started |
 | `sim_g2_datalake` writer | A9 | Not started |
-| CRM export writer | B2 | Not started |
+| CRM export writer | B2 | ✅ Done; generates hourly exports with change simulation |
 
 ## Run it locally
+
+### G2 Database (seed and batch)
 
 From the repository root, in Git Bash:
 
@@ -43,6 +45,46 @@ export PG_HOST=localhost PG_PORT=5432 PG_DB=g2 PG_USER=postgres PG_PASSWORD=loca
 
 # 4. Tests (the database tests create and drop their own databases)
 SIM_TEST_PG="host=localhost port=5432 user=postgres password=local" .venv/Scripts/python -m pytest simulator
+```
+
+### CRM Export Generator (B2)
+
+Generate CRM exports locally:
+
+```bash
+# Generate 3 hourly exports to local directory
+python -m simulator crm-export --local-dir ./test_crm_exports --count 3
+
+# Generate exports with 10% change rate
+python -m simulator crm-export --local-dir ./test_crm_exports --count 3 --change-rate 0.10
+
+# Generate export with >50% change (for AT-21 testing)
+python -m simulator crm-export --local-dir ./test_crm_exports --count 2 --big-change
+
+# Generate exports with data quality issues planted
+python -m simulator crm-export --local-dir ./test_crm_exports --count 1 --plant-issues
+
+# Upload directly to GCS
+python -m simulator crm-export --bucket gks-datalake-poc2-dev-crm --prefix crm --count 3
+
+# Custom start time and seed
+python -m simulator crm-export \
+  --local-dir ./test_crm_exports \
+  --count 3 \
+  --start-time 20261120T080000Z \
+  --seed 42
+```
+
+**Output structure:**
+```
+test_crm_exports/
+  export_ts=20261120T080000Z/
+    account.csv          (50 accounts with hierarchies)
+    store.csv            (100 stores linked to accounts)
+    work_order.csv       (work orders linked to accounts/stores/devices)
+    manifest.json        (file metadata, written last)
+  export_ts=20261120T090000Z/
+    ...
 ```
 
 If port 5432 is already taken (for example by a PostgreSQL installed on Windows), run the container with
@@ -101,9 +143,10 @@ simulator/
   seed.py               seed
   batches.py            batch 1-3
   state.py              the state snapshot in expected/
+  crm_export.py         CRM export generator (B2) ✅
   expected/             batch_1.json .. batch_3.json
   vendor/               POC 1's generator, unchanged (see vendor/README.md)
-  tests/                pytest
+  tests/                pytest (includes test_crm_export.py)
 ```
 
 ## Files still to create here
@@ -113,6 +156,6 @@ simulator/
 | `Case-event publisher` | A7 | Dev 3 | 4-5 | Planted duplicates |
 | `Dockerfile, tick mode, heartbeat, pause switch, RATE` | A8 | Dev 3 (Dev 4: Terraform) | 5-6 | Cloud Run job `poc-source-simulator`, Scheduler `*/5 * * * *` |
 | `sim_g2_datalake writer` | A9 | Dev 3 | 5-6 | `wheel_event` by load job, not streaming |
-| `CRM export writer` | B2 | Dev 3 | 3-4 | Hourly snapshot, manifest last, `--big-change` |
+| ~~`CRM export writer`~~ | ~~B2~~ | ~~Dev 3~~ | ~~3-4~~ | ✅ **DONE** - `crm_export.py` generates hourly exports |
 
 See `GKS-POC-Phase2-detailed-plan.md` for each task's "done when".
