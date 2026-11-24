@@ -14,7 +14,7 @@ wheel-event or continuous-simulator side exists in GCP yet.
 | A2 | Replication bootstrap | Dev 2 | A1, 0.5 | ✅ Done 23 Nov | |
 | A3 | Seed + probe store | Dev 3 | A2, 0.3, 0.6 | ✅ Done 24 Nov | `store_access` empty until 0.7 |
 | A4 | Datastream, backfill, parity snapshot, `cdc.md` | Dev 2 | A2, A3 | ✅ Done 24 Nov | Announcement to Dev 1/Dev 3 still to send |
-| A5 | AT-15 script | Dev 2 | A4, A10 | 🟡 Script written, `--raw` rehearsal 11/11 | Real run needs A10; 3 script fixes (see G2 status) |
+| A5 | AT-15 script | Dev 2 | A4, A10 | 🟡 Script written, `--raw` rehearsal 11/11 | Review fixes done 24 Nov; against `dbt_dev_stg` 9/11 (two views missing); real run needs A10 |
 | A6 | Case events: Avro schema, topic, `raw_lpos.case_event`, BigQuery subscription, dead letters | Dev 4 | 0.7 | ⏳ Not started | `specs.md` (0.7) is still "To be written"; build from the guide's proposed schema (11.2) and confirm it with Dev 5. Steps: `A6_STEPS.md` |
 | A7 | Case-event publisher with planted duplicates | Dev 3 | A6 | ⏳ Not started | |
 | A8 | Simulator in the cloud (image, Cloud Run job, Scheduler every 5 min, heartbeat, pause switch, rate) | Dev 3, Dev 4 | A3, A4 snapshot, A7 | ⏳ Not started | No `tick` command, job, scheduler or `sa-simulator` yet |
@@ -51,7 +51,7 @@ section 10 and its runbook phase. Done when it runs every 5 minutes for 2 hours 
 ## Next, in order
 
 1. Send "parity snapshot taken" (A4).
-2. Fix the A5 script; Dev 3 finishes and commits A10; run AT-15 against `dbt_dev_stg` → **G6**.
+2. Dev 3 finishes and commits A10; run AT-15 against `dbt_dev_stg` → **G6**.
 3. In parallel: A6 (Dev 4) with Dev 5 confirming the Avro schema; then A7 → A8 → A9.
 4. After C3: A11 → A12; with C5, C7 and E5: AT-16 → **G7**.
 

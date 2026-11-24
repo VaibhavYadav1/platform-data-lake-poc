@@ -1,14 +1,14 @@
 {
   "test": "AT-15",
-  "timestamp": "20261124T163205Z",
+  "timestamp": "20261124T105426Z",
   "mode": "raw",
-  "all_match": true,
+  "all_match": false,
   "results": [
     {
       "table": "brands",
-      "source_count": 4,
+      "source_count": 5,
       "staged_count": 4,
-      "match": true
+      "match": false
     },
     {
       "table": "teams",
@@ -70,5 +70,6 @@
       "staged_count": 1,
       "match": true
     }
-  ]
+  ],
+  "note": "Deliberate mismatch (brands source count +1 in a temporary script edit) to prove the test can fail. Not a CDC result."
 }

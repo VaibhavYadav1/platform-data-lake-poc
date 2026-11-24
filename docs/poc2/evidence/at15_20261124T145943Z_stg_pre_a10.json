@@ -1,8 +1,8 @@
 {
   "test": "AT-15",
-  "timestamp": "20261124T163113Z",
-  "mode": "raw",
-  "all_match": true,
+  "timestamp": "20261124T145943Z",
+  "mode": "staging:dbt_dev_stg",
+  "all_match": false,
   "results": [
     {
       "table": "brands",
@@ -61,14 +61,15 @@
     {
       "table": "store_access",
       "source_count": 0,
-      "staged_count": 0,
-      "match": true
+      "staged_count": null,
+      "match": false
     },
     {
       "table": "heartbeat",
       "source_count": 1,
-      "staged_count": 1,
-      "match": true
+      "staged_count": null,
+      "match": false
     }
-  ]
+  ],
+  "note": "Against dbt_dev_stg before A10 is finished: stg_g2__store_access and stg_g2__heartbeat don't exist yet. Not the G6 run."
 }

@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg
@@ -45,7 +45,7 @@ KEYS = {
     "device_locations": ["device_id"],
     "alert_incidents": ["incident_id"],
     "alert_history": ["history_id"],
-    "store_access": ["store_id", "user_id"],
+    "store_access": ["principal", "crm_account_id"],  # sql/g2/schema.sql
     "heartbeat": ["source"],
 }
 
@@ -142,13 +142,17 @@ def source_count(table, pg_port):
 
 
 def staged_count_from_view(client, dataset, table):
-    """Count non-deleted rows from a staging view."""
+    """Count non-deleted rows from a staging view. None if the view doesn't exist (reported as FAIL)."""
     query = f"""
         SELECT COUNT(*)
         FROM `{PROJECT}.{dataset}.stg_g2__{table}`
         WHERE NOT is_deleted
     """
-    result = list(client.query(query).result())
+    try:
+        result = list(client.query(query).result())
+    except NotFound:
+        # A missing view is a failed table, not a crash: the evidence must still list all 11
+        return None
     return result[0][0]
 
 
@@ -176,11 +180,12 @@ def staged_count_from_raw(client, table, keys):
     """
     
     try:
-        result = list(client.query(query).result())
-        return result[0][0]
+        client.get_table(f"{PROJECT}.{RAW_DATASET}.g2_{table}")
     except NotFound:
-        # Table doesn't exist yet (e.g., g2_store_access with no rows)
+        # Datastream creates no table for an empty source table (g2_store_access until its first row)
         return 0
+    result = list(client.query(query).result())
+    return result[0][0]
 
 
 def main():
@@ -195,7 +200,7 @@ def main():
     args = parser.parse_args()
 
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")  # UTC, so the Z is true
     
     client = bigquery.Client(project=PROJECT)
     scheduler_paused = False
@@ -224,11 +229,11 @@ def main():
                 staged = staged_count_from_view(client, args.stg_dataset, table)
             
             match = source == staged
-            status = "OK" if match else "FAIL"
+            status = "OK" if match else ("FAIL (view missing)" if staged is None else "FAIL")
             if not match:
                 all_match = False
-            
-            print(f"{table:<20} {source:>8} {staged:>8} {status}")
+
+            print(f"{table:<20} {source:>8} {'-' if staged is None else staged:>8} {status}")
             
             results.append({
                 "table": table,

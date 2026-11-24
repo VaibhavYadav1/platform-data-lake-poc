@@ -37,7 +37,7 @@ repo, and A8, A11 and A12 haven't started.
 | Seed + probe rows | A3 | ✅ Done | 2,160 rows = baseline 2,157 + `S999`, `D999`, heartbeat |
 | Datastream into `raw_g2` | A4 | ✅ Done | Stream RUNNING; backfill 2,160 rows, no duplicates; `raw_g2_parity` 10 tables / 2,160 rows; `cdc.md` |
 | Announce "parity snapshot taken" | A4 | ⚠️ Not done | Lifts the A3 freeze for Dev 1 (C4) and Dev 3 (simulator). A person must send it |
-| First-copy proof (AT-15) | A5 | 🟡 Script done, test not passed | `--raw` rehearsal passes 11/11 (`docs/poc2/evidence/at15_20261124T163323Z.json`). Done when = AT-15 passes **against the staging views** (gate G6); blocked by A10. Script fixes below |
+| First-copy proof (AT-15) | A5 | 🟡 Script done, test not passed | `--raw` rehearsal passes 11/11 (`docs/poc2/evidence/at15_20261124T145732Z.json`). Against `dbt_dev_stg`: 9/11, two views missing. Done when = AT-15 passes **against the staging views** (gate G6); blocked by A10 |
 | Change-data staging | A10 | 🟡 Started, not in repo | 9 views in `dbt_dev_stg` (deployed 10:35 UTC); `dbt/models/staging/g2/` holds only a README. Missing `stg_g2__heartbeat` and `stg_g2__store_access`. Orders by `change_sequence_number` as text (wrong, `cdc.md` 4.5). The 9 views' non-deleted counts equal Cloud SQL |
 | Continuous changes (tick) | A8 | ⏳ Not started | No `tick` command, no `poc-source-simulator` job, no `poc-simulator-tick` scheduler, no `sa-simulator`. Needs A7 → A6 |
 | Validated alerts | C7 | ⏳ POC C | |
@@ -51,18 +51,10 @@ repo, and A8, A11 and A12 haven't started.
 ## Pending, in order
 
 1. **Announce the parity snapshot** (A4): one message to Dev 1 and Dev 3.
-2. **Fix the A5 script** (Dev 2, 15 minutes):
-   - `KEYS["store_access"]` is `["store_id", "user_id"]`; the table's key is `["principal", "crm_account_id"]`
-     (`sql/g2/schema.sql`). Today the table doesn't exist so it's never used; the first `simulator grant` would make
-     `--raw` fail with "Unrecognized name: store_id".
-   - The evidence timestamp uses local time with a `Z` suffix (`datetime.now()`): files named `...T161612Z` were
-     written at 10:46 UTC. Use `datetime.now(timezone.utc)`.
-   - In `--stg-dataset` mode a missing view raises `NotFound` and the script crashes instead of reporting FAIL. Catch
-     it per table and report the table as failed (missing view), so G6 evidence is complete.
-   - `scripts/acceptance/README.md` marks the script "✓ Complete": change to "`--raw` rehearsal passes; real run
-     after A10".
-   - Keep one passing and one deliberately failing evidence file (rename the failing one, e.g.
-     `at15_..._negative_test.json`), and delete the other four duplicates, so G6 reviewers aren't confused.
+2. ~~**Fix the A5 script**~~ ✅ Done 24 Nov: `store_access` key is `principal, crm_account_id`; evidence names are
+   UTC; a missing staging view is reported as `FAIL (view missing)` instead of crashing; README wording fixed;
+   evidence reduced to the `--raw` pass (`at15_20261124T145732Z.json`), the negative test and a pre-A10 staging run
+   (`..._stg_pre_a10.json`: 9/11 OK, `store_access` and `heartbeat` views missing).
 3. **Finish A10** (Dev 3): commit `cdc_current_state()` and all 11 views to `dbt/models/staging/g2/`; add
    `stg_g2__heartbeat` and `stg_g2__store_access` (the raw table doesn't exist yet: the source must tolerate that);
    order by `source_timestamp`, then the LSN from `sort_keys[1]` parsed from hex (`cdc.md` 4.5), not `_seq`.

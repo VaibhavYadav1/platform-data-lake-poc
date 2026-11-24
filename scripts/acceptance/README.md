@@ -27,13 +27,13 @@ python scripts/acceptance/at15_cdc_initial.py --raw
 python scripts/acceptance/at15_cdc_initial.py --stg-dataset dbt_<you>_stg
 ```
 
-**Expected output:** 11/11 tables with matching counts, exit code 0
+**Expected output:** 11/11 tables with matching counts, exit code 0. A missing staging view is reported as `FAIL (view missing)`, not a crash. AT-15 (gate G6) counts only the `--stg-dataset` run; `--raw` is a rehearsal. Evidence file names are UTC.
 
 ## Files to create here
 
 | File                          | Task | Owner | Day | Notes              |
 | ----------------------------- | ---- | ----- | --- | ------------------ |
-| `at15_cdc_initial.py`         | A5   | Dev 2 | 5   | ✓ Complete         |
+| `at15_cdc_initial.py`         | A5   | Dev 2 | 5   | `--raw` rehearsal passes; real run (G6) after A10 |
 | `at17_incremental_vs_full.py` | A12  | Dev 3 | 8-9 |                    |
 | `run_all.py`                  | -    | Dev 5 | -   | Runs every at\*.py |
 
