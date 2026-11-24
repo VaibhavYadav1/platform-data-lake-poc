@@ -50,6 +50,8 @@ repo, and A8, A11 and A12 haven't started.
 
 ## Pending, in order
 
+**Step-by-step for the critical path (A4 close → A10 → A5 → G6): `docs/poc2/CRITICAL_PATH_G6.md`.** A10's code is on branch `origin/poc_c_dbt` (with POC C), not on `main`; that document brings it over and fixes the ordering and the missing `g2_store_access` table (rehearsed 24 Nov: 38/38, AT-15 11/11).
+
 1. **Announce the parity snapshot** (A4): one message to Dev 1 and Dev 3.
 2. ~~**Fix the A5 script**~~ ✅ Done 24 Nov: `store_access` key is `principal, crm_account_id`; evidence names are
    UTC; a missing staging view is reported as `FAIL (view missing)` instead of crashing; README wording fixed;
