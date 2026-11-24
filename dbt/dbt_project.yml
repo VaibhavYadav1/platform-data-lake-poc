@@ -15,7 +15,7 @@ vars:
   crm_raw_dataset: raw_crm
   lpos_raw_dataset: raw_lpos
   g2dl_dataset: sim_g2_datalake
-  g2dl_project: "{{ target.project }}"
+  # g2dl_project: defaults to the target project in sources.yml; set it only if the lake is in another project
   future_tolerance_minutes: 5     # DQ34
   incremental_lookback_minutes: 30
   golden_step: baseline           # which golden_store_health checkpoint the golden test compares
