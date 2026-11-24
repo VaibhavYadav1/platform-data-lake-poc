@@ -611,6 +611,32 @@ Destroying `shared` also removes the Cloud Build service accounts and triggers, 
 
 ### 7.1 Run Logs
 
+**What is recorded where.** Only some components keep a row in BigQuery. The rest write only to Cloud Logging
+(`gcloud logging read`) and to the Workflows execution history.
+
+| Component | Persistent record in BigQuery | Also in Cloud Logging |
+|-----------|-------------------------------|-----------------------|
+| `poc-micro-batch-<env>` | `ops_<env>.pipeline_run_steps`: one row per step, with status, error and times | yes |
+| `poc-full-load-<env>` | `ops_<env>.full_load_log`: one row per run | yes |
+| `full_load.py` (inside the dbt job) | `ops_<env>.dq_result`: the DQ39 drift results, one row per fact per run | yes |
+| `publish.py` (inside the dbt job) | `ops_<env>.publish_log`, `ops_<env>.publish_policy_state` | yes |
+| `freshness_check` (inside the dbt job) | `ops_<env>.freshness_result` | yes |
+| `poc-watchdog`, `poc-night-off`, `poc-morning-on` | **none** | yes: the only record, plus the execution history |
+
+**Who creates what.** Terraform (`terraform/env`, module `bq_env`) creates only the dataset `ops_<env>`. Every table
+in it is created by its writer on that writer's first run:
+
+| Table | Created by, on its first run |
+|-------|------------------------------|
+| `pipeline_run_steps` | the micro-batch workflow |
+| `full_load_log` | the full-load workflow |
+| `dq_result` | `full_load.py` |
+| `publish_log`, `publish_policy_state` | `publish.py` |
+| `freshness_result` | the `freshness_check` macro |
+
+No writer can create the dataset, so apply `terraform/env` before the first run of any of them: a missing `ops_<env>`
+makes each of them fail with a 404.
+
 **Micro-batch runs:**
 ```sql
 SELECT run_id, step, status, error, started_at
