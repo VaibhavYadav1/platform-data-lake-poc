@@ -8,12 +8,14 @@
 # Terraform receives the tag as TF_VAR_image_tag (ignored until a module declares it, E3).
 #
 # Steps whose input isn't merged yet (Dockerfiles, int files) print SKIPPED and pass.
-# Still to add: dbt docs generate and copy to the docs bucket (E10, Day 10).
+# dbt docs (E10) are generated and published after the Terraform steps.
 
 substitutions:
   _TF_IMAGE: hashicorp/terraform:1.17
   _REGION: us-central1
   _REPO: poc # Artifact Registry repository, created in terraform/shared/cloudbuild_main.tf
+  _PY_IMAGE: python:3.12-slim
+  _SDK_IMAGE: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -101,3 +103,81 @@ steps:
         rm -rf .terraform
         terraform init -input=false -reconfigure -backend-config=int.backend.hcl
         terraform apply -input=false -auto-approve -lock-timeout=300s -var-file=int.tfvars
+
+  # ------------------------------------------------------------ dbt docs (E10)
+  # Generate the dbt documentation and publish it to gs://<project>-dbt-docs/<env>/index.html.
+  # Two steps per environment, on plain images, so a merge before the dbt project exists still
+  # passes: a step whose image was the dbt-runner would fail at the pull, before its skip check.
+  #   docs-<env>          dbt docs generate --static   (one self-contained HTML file)
+  #   publish-docs-<env>  copy it, and manifest.json beside it (AT-37 reads the descriptions there)
+  # `--static` writes target/static_index.html; target/index.html is the version that needs the
+  # JSON files next to it, so it is NOT the file to publish.
+  - id: docs-dev
+    name: ${_PY_IMAGE}
+    waitFor: [apply-dev]
+    dir: dbt
+    entrypoint: sh
+    env:
+      - DBT_PROFILES_DIR=.
+      - GCP_PROJECT=$PROJECT_ID
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f dbt_project.yml ]; then
+          echo "SKIPPED docs-dev: dbt/dbt_project.yml not merged yet (0.4)"; exit 0
+        fi
+        pip install --quiet --no-cache-dir -r requirements.txt
+        dbt deps
+        dbt docs generate --static --target dev
+
+  - id: publish-docs-dev
+    name: ${_SDK_IMAGE}
+    waitFor: [docs-dev]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f dbt/target/static_index.html ]; then
+          echo "SKIPPED publish-docs-dev: no docs were generated"; exit 0
+        fi
+        dest=gs://$PROJECT_ID-dbt-docs/dev
+        gcloud storage cp dbt/target/static_index.html "$$dest/index.html"
+        gcloud storage cp dbt/target/manifest.json "$$dest/manifest.json"
+        echo "dbt docs published: https://storage.cloud.google.com/$PROJECT_ID-dbt-docs/dev/index.html"
+
+  - id: docs-int
+    name: ${_PY_IMAGE}
+    waitFor: [apply-int]
+    dir: dbt
+    entrypoint: sh
+    env:
+      - DBT_PROFILES_DIR=.
+      - GCP_PROJECT=$PROJECT_ID
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f ../terraform/env/int.tfvars ] || [ ! -f dbt_project.yml ]; then
+          echo "SKIPPED docs-int: int environment (E9) or the dbt project not merged yet"; exit 0
+        fi
+        pip install --quiet --no-cache-dir -r requirements.txt
+        dbt deps
+        dbt docs generate --static --target int
+
+  - id: publish-docs-int
+    name: ${_SDK_IMAGE}
+    waitFor: [docs-int]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f dbt/target/static_index.html ]; then
+          echo "SKIPPED publish-docs-int: no docs were generated"; exit 0
+        fi
+        dest=gs://$PROJECT_ID-dbt-docs/int
+        gcloud storage cp dbt/target/static_index.html "$$dest/index.html"
+        gcloud storage cp dbt/target/manifest.json "$$dest/manifest.json"
+        echo "dbt docs published: https://storage.cloud.google.com/$PROJECT_ID-dbt-docs/int/index.html"
