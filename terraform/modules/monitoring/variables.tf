@@ -6,7 +6,6 @@ variable "project_id" {
 variable "alert_email" {
   description = "Team address that receives every alert. Empty creates the policies with no notification, and Terraform warns."
   type        = string
-  default     = ""
 }
 
 variable "workflow_name_pattern" {
