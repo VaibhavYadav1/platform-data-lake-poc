@@ -60,7 +60,8 @@ def test_plan_step_order(doc):
 def test_build_publish_runs_microbatch_and_fails_the_workflow(doc):
     step = main_step(doc, "build_publish")
     assert step["call"] == "run_job"
-    assert step["args"]["job_args"] == ["microbatch"]
+    assert step["args"]["job_args"] == "${build_args}"
+    assert main_step(doc, "prepare_build_args")["assign"] == [{"build_args": ["microbatch"]}]
     assert step["args"]["warn_only"] is False
 
 
