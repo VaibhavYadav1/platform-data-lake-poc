@@ -1,0 +1,74 @@
+{
+  "test": "AT-15",
+  "timestamp": "20261124T163205Z",
+  "mode": "raw",
+  "all_match": true,
+  "results": [
+    {
+      "table": "brands",
+      "source_count": 4,
+      "staged_count": 4,
+      "match": true
+    },
+    {
+      "table": "teams",
+      "source_count": 5,
+      "staged_count": 5,
+      "match": true
+    },
+    {
+      "table": "statuses",
+      "source_count": 7,
+      "staged_count": 7,
+      "match": true
+    },
+    {
+      "table": "users",
+      "source_count": 18,
+      "staged_count": 18,
+      "match": true
+    },
+    {
+      "table": "alert_types",
+      "source_count": 11,
+      "staged_count": 11,
+      "match": true
+    },
+    {
+      "table": "stores",
+      "source_count": 41,
+      "staged_count": 41,
+      "match": true
+    },
+    {
+      "table": "device_locations",
+      "source_count": 133,
+      "staged_count": 133,
+      "match": true
+    },
+    {
+      "table": "alert_incidents",
+      "source_count": 450,
+      "staged_count": 450,
+      "match": true
+    },
+    {
+      "table": "alert_history",
+      "source_count": 1490,
+      "staged_count": 1490,
+      "match": true
+    },
+    {
+      "table": "store_access",
+      "source_count": 0,
+      "staged_count": 0,
+      "match": true
+    },
+    {
+      "table": "heartbeat",
+      "source_count": 1,
+      "staged_count": 1,
+      "match": true
+    }
+  ]
+}
