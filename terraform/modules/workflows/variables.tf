@@ -83,3 +83,17 @@ variable "watchdog_interval_minutes" {
   type        = number
   default     = 5
 }
+
+# ---- E6: full load --------------------------------------------------------------------------
+
+variable "full_load_environments" {
+  description = "Environments that get a full-load workflow and scheduler. Add int in E9, once poc-dbt-runner-int exists."
+  type        = set(string)
+  default     = ["dev"]
+}
+
+variable "full_load_schedule" {
+  description = "Cron for poc-full-load: 20:15, Monday to Friday."
+  type        = string
+  default     = "15 20 * * 1-5"
+}

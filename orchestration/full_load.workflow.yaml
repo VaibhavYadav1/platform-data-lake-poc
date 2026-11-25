@@ -1,0 +1,213 @@
+# poc-full-load-<env> (E6): the daily full rebuild.
+#
+# Runs at 20:15, Monday to Friday, after poc-night-off (20:00) has paused the micro-batch, so
+# nothing else writes to build while it rebuilds. It reads only BigQuery, so Cloud SQL can be
+# stopped. poc-night-off and poc-morning-on do NOT touch this job's scheduler.
+#
+# This workflow only starts the Cloud Run job poc-dbt-runner-<env> with the argument `fullload`
+# (the micro-batch starts the same job with `microbatch`). The container's entrypoint.sh reads
+# that argument and runs orchestration/publish/full_load.py, which does the work:
+#   1. clone every incremental fact into ops_<env>.prev_<fact>
+#   2. dbt build --full-refresh
+#   3. DQ39: compare each fact with its clone, record the counts in ops_<env>.dq_result
+#   4. DQ41: scan build for email-like values (stops before publishing if it finds one)
+#   5. publish.py --all
+# Exit code 3 means the load and the publish finished but DQ39 found drift. Any non-zero exit makes
+# the job, and so this workflow, FAIL, and the "failed poc-* workflow" alert fires.
+#
+# Every run writes one row to ops_<env>.full_load_log (SUCCEEDED or FAILED, with the error).
+#
+# Run by hand:  gcloud workflows run poc-full-load-dev --location us-central1 --data='{}'
+# Settings: Terraform sets POC_ENV and POC_PROJECT on each workflow; args can override them.
+# Arguments (all optional): env, project, location, dbt_job, timeout_seconds
+main:
+  params: [args]
+  steps:
+    - init_args:
+        assign:
+          - cfg: {}
+    - merge_args:
+        switch:
+          - condition: ${args != null}
+            assign:
+              - cfg: ${args}
+    - init:
+        assign:
+          - started: ${sys.now()}
+          - run_id: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+          # "env" is a reserved word in Workflows, so the variable is env_name.
+          - env_name: ${default(map.get(cfg, "env"), sys.get_env("POC_ENV", "dev"))}
+          - project_id: ${default(map.get(cfg, "project"), sys.get_env("POC_PROJECT", sys.get_env("GOOGLE_CLOUD_PROJECT_ID")))}
+          - location: ${default(map.get(cfg, "location"), "us-central1")}
+          - dbt_job: ${default(map.get(cfg, "dbt_job"), "poc-dbt-runner-" + env_name)}
+          # The job's own timeout is 15 minutes (E3); a full rebuild is allowed 45.
+          - timeout_seconds: ${default(map.get(cfg, "timeout_seconds"), 2700)}
+          - ctx:
+              project_id: ${project_id}
+              env_name: ${env_name}
+              run_id: ${run_id}
+              ops_dataset: ${"ops_" + env_name}
+              table_id: "full_load_log"
+
+    - ensure_log_table:
+        call: ensure_log_table
+        args:
+          ctx: ${ctx}
+
+    - log_start:
+        call: sys.log
+        args:
+          severity: INFO
+          json:
+            event: "full_load_start"
+            run_id: ${run_id}
+            env: ${env_name}
+            job: ${dbt_job}
+
+    - run_fullload:
+        try:
+          # The call waits for the execution to finish and raises if it failed, so there is nothing
+          # to poll. connector_params.timeout is the longest it waits.
+          call: googleapis.run.v2.projects.locations.jobs.run
+          args:
+            name: ${"projects/" + project_id + "/locations/" + location + "/jobs/" + dbt_job}
+            body:
+              overrides:
+                timeout: ${string(timeout_seconds) + "s"}
+                containerOverrides:
+                  - args: ["fullload"]
+                    env:
+                      # full_load.py writes this run id into dq_result, so the two tables line up.
+                      - name: RUN_ID
+                        value: ${run_id}
+            connector_params:
+              timeout: ${timeout_seconds + 300}
+          result: execution
+        except:
+          as: e
+          steps:
+            - log_failed:
+                call: log_result
+                args:
+                  ctx: ${ctx}
+                  started: ${started}
+                  status: "FAILED"
+                  error: ${default(map.get(e, "message"), "unknown error")}
+            - raise_failure:
+                raise: ${e}
+
+    - log_succeeded:
+        call: log_result
+        args:
+          ctx: ${ctx}
+          started: ${started}
+          status: "SUCCEEDED"
+          error: null
+
+    - done:
+        return:
+          run_id: ${run_id}
+          env: ${env_name}
+          status: "SUCCEEDED"
+          seconds: ${sys.now() - started}
+
+
+# =================================================================
+# Subworkflow: create ops_<env>.full_load_log when it does not exist yet.
+# A 404 from get means "missing" and triggers the insert; any other error is raised. The ops
+# dataset itself comes from Terraform; if it is missing the insert fails with a 404 too.
+# =================================================================
+ensure_log_table:
+  params: [ctx]
+  steps:
+    - get_table:
+        try:
+          call: googleapis.bigquery.v2.tables.get
+          args:
+            projectId: ${ctx.project_id}
+            datasetId: ${ctx.ops_dataset}
+            tableId: ${ctx.table_id}
+        except:
+          as: tbl_err
+          steps:
+            - table_missing_switch:
+                switch:
+                  - condition: ${map.get(tbl_err, "code") == 404}
+                    steps:
+                      - create_table:
+                          call: googleapis.bigquery.v2.tables.insert
+                          args:
+                            projectId: ${ctx.project_id}
+                            datasetId: ${ctx.ops_dataset}
+                            body:
+                              tableReference:
+                                projectId: ${ctx.project_id}
+                                datasetId: ${ctx.ops_dataset}
+                                tableId: ${ctx.table_id}
+                              timePartitioning:
+                                type: DAY
+                                field: started_at
+                              schema:
+                                fields:
+                                  - {name: run_id, type: STRING, mode: REQUIRED}
+                                  - {name: env, type: STRING, mode: REQUIRED}
+                                  - {name: started_at, type: TIMESTAMP, mode: REQUIRED}
+                                  - {name: finished_at, type: TIMESTAMP, mode: REQUIRED}
+                                  - {name: status, type: STRING, mode: REQUIRED}
+                                  - {name: error, type: STRING, mode: NULLABLE}
+                      - table_created:
+                          return: "created"
+            - raise_table_error:
+                raise: ${tbl_err}
+    - ensure_done:
+        return: "ok"
+
+
+# =================================================================
+# Subworkflow: write one row to ops_<env>.full_load_log.
+# A logging problem is written to the workflow log and never hides the real result or error.
+# =================================================================
+log_result:
+  params: [ctx, started, status, error]
+  steps:
+    - build_row:
+        assign:
+          - row:
+              run_id: ${ctx.run_id}
+              env: ${ctx.env_name}
+              started_at: ${time.format(started, "UTC")}
+              finished_at: ${time.format(sys.now(), "UTC")}
+              status: ${status}
+              error: ${error}
+    - stream_to_bigquery:
+        try:
+          steps:
+            - insert_row:
+                call: googleapis.bigquery.v2.tabledata.insertAll
+                args:
+                  projectId: ${ctx.project_id}
+                  datasetId: ${ctx.ops_dataset}
+                  tableId: ${ctx.table_id}
+                  body:
+                    rows:
+                      - json: ${row}
+                result: bq_insert_response
+            - check_insert_errors:
+                switch:
+                  - condition: ${default(map.get(bq_insert_response, "insertErrors"), null) != null}
+                    steps:
+                      - log_bq_error:
+                          call: sys.log
+                          args:
+                            severity: ERROR
+                            text: '${"BigQuery rejected the full_load_log row: " + json.encode_to_string(bq_insert_response.insertErrors)}'
+        except:
+          as: insert_err
+          steps:
+            - log_stream_failure:
+                call: sys.log
+                args:
+                  severity: ERROR
+                  text: '${"Failed to write full_load_log: " + default(map.get(insert_err, "message"), "unknown error")}'
+    - finish_logging:
+        return: "done"
