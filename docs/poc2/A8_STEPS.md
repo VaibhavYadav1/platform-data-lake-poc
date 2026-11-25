@@ -25,15 +25,15 @@ day, which AT-16 (latency), the watchdog (E7) and the 24-hour run (phase 12) dep
 
 ## What's in the code
 
-| File | What |
-| --- | --- |
-| `simulator/tick.py` | One tick (guide 10.5). Imports nothing from the Phase 1 generator |
-| `simulator/cli.py` | `python -m simulator tick [--rate R]`; `seed`/`batch` imports are now lazy |
-| `simulator/db.py` | Error text only: in the cloud, `PG_HOST=/cloudsql/<connection name>` |
-| `simulator/Dockerfile`, `.gcloudignore`, `requirements-runtime.txt` | The image: public PyPI only, code in `/app/simulator`, non-root |
-| `simulator/tests/test_tick.py` | 8 tests: counts in range, rate 0, 150 ticks stay valid, failed step leaves the heartbeat stale, CRM hook timing, CLI, no `data-lake-schema` import |
-| `terraform/shared/simulator.tf` | `sa-simulator` + Cloud SQL client + secret accessor, the job, `run.invoker` for `sa-orchestrator`, the scheduler (paused) |
-| `terraform/shared/night_off.tf`, `modules/workflows/variables.tf` | Night-off/morning-on now pause/resume `poc-simulator-tick` (was the non-existent `poc-simulator`) |
+| File                                                                | What                                                                                                                                               |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `simulator/tick.py`                                                 | One tick (guide 10.5). Imports nothing from the Phase 1 generator                                                                                  |
+| `simulator/cli.py`                                                  | `python -m simulator tick [--rate R]`; `seed`/`batch` imports are now lazy                                                                         |
+| `simulator/db.py`                                                   | Error text only: in the cloud, `PG_HOST=/cloudsql/<connection name>`                                                                               |
+| `simulator/Dockerfile`, `.gcloudignore`, `requirements-runtime.txt` | The image: public PyPI only, code in `/app/simulator`, non-root                                                                                    |
+| `simulator/tests/test_tick.py`                                      | 8 tests: counts in range, rate 0, 150 ticks stay valid, failed step leaves the heartbeat stale, CRM hook timing, CLI, no `data-lake-schema` import |
+| `terraform/shared/simulator.tf`                                     | `sa-simulator` + Cloud SQL client + secret accessor, the job, `run.invoker` for `sa-orchestrator`, the scheduler (paused)                          |
+| `terraform/shared/night_off.tf`, `modules/workflows/variables.tf`   | Night-off/morning-on now pause/resume `poc-simulator-tick` (was the non-existent `poc-simulator`)                                                  |
 
 Design problems fixed (recorded in the guide, 10.5/10.6/phase 8, section 21):
 
@@ -63,6 +63,15 @@ gcloud datastream streams describe poc-cdc-stream --location=us-central1 --forma
 One message to Dev 1 and Dev 3: "`raw_g2_parity` is frozen; the A3 freeze is lifted." From the first tick on, G2
 changes all the time. Never touch `raw_g2_parity`.
 
+**Nothing to do to freeze it.** A4 made the 10 tables as BigQuery snapshot tables (`CREATE SNAPSHOT TABLE ... CLONE`),
+which can't be changed. Checked 25 Nov: 10 tables, all `SNAPSHOT`, no expiry on the tables or the dataset, 2,160
+rows. To check again:
+
+```sql
+SELECT table_name, table_type FROM `gks-datalake-poc2-dev.raw_g2_parity.INFORMATION_SCHEMA.TABLES`;   -- 10 × SNAPSHOT
+SELECT SUM(row_count) FROM `gks-datalake-poc2-dev.raw_g2_parity.__TABLES__`;                          -- 2160
+```
+
 ## Step 2: Run the tests locally (optional, ~1 minute)
 
 **Why:** the same checks I ran, on your machine, before anything reaches GCP.
@@ -85,15 +94,21 @@ git push origin main
 
 TAG=$(git rev-parse --short HEAD)
 IMAGE=us-central1-docker.pkg.dev/gks-datalake-poc2-dev/poc/poc-source-simulator:$TAG
-gcloud builds submit simulator/ --tag "$IMAGE" --project=gks-datalake-poc2-dev
+gcloud builds submit simulator/ --tag "$IMAGE" --project=gks-datalake-poc2-dev \
+  --service-account "projects/gks-datalake-poc2-dev/serviceAccounts/sa-cloudbuild-deploy@gks-datalake-poc2-dev.iam.gserviceaccount.com"
 echo "$IMAGE"
 ```
+
+**Note on service account:** Manual builds with `gcloud builds submit` use the **custom service account**
+`sa-cloudbuild-deploy` (which has `roles/artifactregistry.writer` from Terraform). Without `--service-account`,
+the command would use Google's default Cloud Build service account which has no permissions. The automated
+pipeline (triggered by `git push`) already uses `sa-cloudbuild-deploy` via the trigger configuration.
 
 **Check:** the build ends with `SUCCESS`, and
 `gcloud artifacts docker images list us-central1-docker.pkg.dev/gks-datalake-poc2-dev/poc --include-tags` lists the tag.
 
-If the build is refused with a permission error on the bucket or the repository, the Cloud Build service account
-needs `roles/artifactregistry.writer` on repo `poc`. Ask before granting it.
+If the build is refused with a permission error on the bucket or the repository, verify the service account
+has `roles/artifactregistry.writer` on repo `poc` (it should, from `terraform/shared/cloudbuild_main.tf`).
 
 ## Step 4: Terraform: plan, read, apply
 
@@ -103,11 +118,34 @@ Add the image to `terraform/shared/terraform.tfvars` (the full value printed by 
 simulator_image = "us-central1-docker.pkg.dev/gks-datalake-poc2-dev/poc/poc-source-simulator:<tag>"
 ```
 
+**Plan with `-target` (25 Nov).** A full `terraform plan` in `shared` shows changes that aren't A8 (first run:
+10 add, 6 change, 8 destroy):
+
+- **Datastream replaced** (`poc-ops-db-pg` and `poc-cdc-stream`): a false difference. The API returns
+  `serverVerification` empty, so Terraform thought the CA check was missing. Applying it would have re-created the
+  stream and run a new backfill into `raw_g2`. **Fixed** in `modules/datastream_pg` (`ignore_changes` on `ssl_config`).
+- **Lineage API, `dbt_docs` bucket and its grant destroyed; monitoring metrics replaced, a notification channel
+  destroyed:** these were applied from branch `poc-e-orchestration` (E7, E10), which isn't merged into `main`, so
+  `main` doesn't know them. Not A8's to change. They go away from the plan when that branch is merged (its owner,
+  Dev 4). Until then **never run a full `terraform apply` in `shared` from `main`**.
+
+So A8 is planned with only its own resources:
+
 ```bash
 cd terraform/shared
 terraform init -backend-config=backend.hcl     # only if .terraform is missing
-terraform plan -out=a8.tfplan
+terraform plan -out=a8.tfplan \
+  -target=google_service_account.simulator \
+  -target=google_project_iam_member.simulator_sql_client \
+  -target=google_secret_manager_secret_iam_member.simulator_password \
+  -target=google_cloud_run_v2_job.simulator \
+  -target=google_cloud_run_v2_job_iam_member.orchestrator_runs_simulator \
+  -target=google_cloud_scheduler_job.simulator_tick \
+  -target=module.night_off.google_cloud_scheduler_job.night_off \
+  -target=module.night_off.google_cloud_scheduler_job.morning_on
 ```
+
+Terraform warns that `-target` is for exceptional cases; that is expected here.
 
 **Read the plan before applying.** Expect:
 
@@ -125,7 +163,10 @@ terraform apply a8.tfplan
 cd ../..
 ```
 
-Commit the `terraform.tfvars` change (`A8: simulator image <tag>`).
+The `terraform.tfvars` change (image `b2ec315`) is already committed.
+
+**When `poc-e-orchestration` is merged:** it was branched before A8, so its `night_off.tf` lacks the
+`simulator_scheduler_jobs` line and it has no `simulator.tf`. Keep both from `main` when resolving the merge.
 
 **Check:**
 
@@ -204,12 +245,12 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 **Pass:** `succeededCount = 1`, and the log has a line like
 `tick rate=1.0 opened=5 updated=6 closed=2 deleted=0 moved=0 planted=0 history=13 case_events=off wheel_events=off crm=no heartbeat=ok`.
 
-| Log says | Cause |
-| --- | --- |
+| Log says                                                            | Cause                                                                        |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `connection ... /cloudsql/... failed` / `No such file or directory` | Socket volume or `roles/cloudsql.client` missing; or the database is stopped |
-| `password authentication failed for user "simulator_user"` | Wrong secret, or the password in the secret differs from the database user's |
-| `Permission denied on secret` (execution doesn't start) | The secret grant to `sa-simulator` |
-| `permission denied for table ...` | `simulator_user` is missing a grant from A2 (`sql/g2/replication.sql`) |
+| `password authentication failed for user "simulator_user"`          | Wrong secret, or the password in the secret differs from the database user's |
+| `Permission denied on secret` (execution doesn't start)             | The secret grant to `sa-simulator`                                           |
+| `permission denied for table ...`                                   | `simulator_user` is missing a grant from A2 (`sql/g2/replication.sql`)       |
 
 ### V2. Cloud SQL changed (the source)
 
@@ -288,13 +329,13 @@ ORDER BY beat_at;
 
 ### V7. Every source changes
 
-| Source | Check | Pass |
-| --- | --- | --- |
-| G2 incidents/history | V3 query with `INTERVAL 2 HOUR` | INSERT, UPDATE and at least one DELETE |
-| Heartbeat | V6 | ~24 beats |
-| Case events (after "Later") | `SELECT COUNT(*) FROM raw_lpos.case_event WHERE publish_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE)` | ≥ 2 every 10 minutes, never 0 |
-| Case duplicates (after "Later") | runbook phase 7 "planted duplicates" query | a few `event_id`s with 2 copies |
-| CRM (when B2's bucket exists) | `gcloud storage ls gs://<bucket>/crm/` | one new export per hour |
+| Source                          | Check                                                                                                                  | Pass                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| G2 incidents/history            | V3 query with `INTERVAL 2 HOUR`                                                                                        | INSERT, UPDATE and at least one DELETE |
+| Heartbeat                       | V6                                                                                                                     | ~24 beats                              |
+| Case events (after "Later")     | `SELECT COUNT(*) FROM raw_lpos.case_event WHERE publish_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE)` | ≥ 2 every 10 minutes, never 0          |
+| Case duplicates (after "Later") | runbook phase 7 "planted duplicates" query                                                                             | a few `event_id`s with 2 copies        |
+| CRM (when B2's bucket exists)   | `gcloud storage ls gs://<bucket>/crm/`                                                                                 | one new export per hour                |
 
 ### V8. Rate setting
 
