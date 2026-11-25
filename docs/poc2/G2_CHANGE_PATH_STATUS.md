@@ -39,7 +39,7 @@ repo, and A8, A11 and A12 haven't started.
 | Announce "parity snapshot taken" | A4 | ⚠️ Not done | Lifts the A3 freeze for Dev 1 (C4) and Dev 3 (simulator). A person must send it |
 | First-copy proof (AT-15) | A5 | 🟡 Script done, test not passed | `--raw` rehearsal passes 11/11 (`docs/poc2/evidence/at15_20261124T145732Z.json`). Against `dbt_dev_stg`: 9/11, two views missing. Done when = AT-15 passes **against the staging views** (gate G6); blocked by A10 |
 | Change-data staging | A10 | 🟡 Started, not in repo | 9 views in `dbt_dev_stg` (deployed 10:35 UTC); `dbt/models/staging/g2/` holds only a README. Missing `stg_g2__heartbeat` and `stg_g2__store_access`. Orders by `change_sequence_number` as text (wrong, `cdc.md` 4.5). The 9 views' non-deleted counts equal Cloud SQL |
-| Continuous changes (tick) | A8 | 🟡 Code written, not deployed (25 Nov) | `simulator/tick.py`, image, `terraform/shared/simulator.tf` (job, paused scheduler, `sa-simulator`). G2 + heartbeat can run now; case events wait for A6 → A7. Runbook: `A8_STEPS.md` |
+| Continuous changes (tick) | A8 | 🟡 Deployed 25 Nov, schedule paused | `simulator/tick.py`, image, `terraform/shared/simulator.tf` (job, paused scheduler, `sa-simulator`). G2 + heartbeat can run now; case events wait for A6 → A7. Runbook: `A8_STEPS.md` |
 | Validated alerts | C7 | ⏳ POC C | |
 | Incremental facts | A11 | ⏳ Not started | Needs C3 and A10. Done when AT-18 passes |
 | Scripted-batch harness | A12 | ⏳ Not started | Needs A11. Done when AT-17 passes |

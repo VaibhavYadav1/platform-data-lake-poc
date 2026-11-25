@@ -17,7 +17,7 @@ wheel-event or continuous-simulator side exists in GCP yet.
 | A5 | AT-15 script | Dev 2 | A4, A10 | 🟡 Script written, `--raw` rehearsal 11/11 | Review fixes done 24 Nov; against `dbt_dev_stg` 9/11 (two views missing); real run needs A10 |
 | A6 | Case events: Avro schema, topic, `raw_lpos.case_event`, BigQuery subscription, dead letters | Dev 4 | 0.7 | ⏳ Not started | `specs.md` (0.7) is still "To be written"; build from the guide's proposed schema (11.2) and confirm it with Dev 5. Steps: `A6_STEPS.md` |
 | A7 | Case-event publisher with planted duplicates | Dev 3 | A6 | ⏳ Not started | |
-| A8 | Simulator in the cloud (image, Cloud Run job, Scheduler every 5 min, heartbeat, pause switch, rate) | Dev 3, Dev 4 | A3, A4 snapshot, A7 | 🟡 Code written 25 Nov, not deployed | `tick`, Dockerfile, `terraform/shared/simulator.tf`; 8 tick tests pass. Deploy and checks: `A8_STEPS.md`. Case events wait for A6/A7 |
+| A8 | Simulator in the cloud (image, Cloud Run job, Scheduler every 5 min, heartbeat, pause switch, rate) | Dev 3, Dev 4 | A3, A4 snapshot, A7 | 🟡 Deployed 25 Nov (schedule paused) | `tick`, Dockerfile, `terraform/shared/simulator.tf`; 8 tick tests pass. Deploy and checks: `A8_STEPS.md`. Case events wait for A6/A7 |
 | A9 | `sim_g2_datalake` + `derived_alert` scheduled query + writer | Dev 1, Dev 3 | A8 | ⏳ Not started | |
 | A10 | `cdc_current_state()` + 11 `stg_g2__*` views | Dev 3 | A4 | 🟡 Started, not in repo | 9 views in `dbt_dev_stg`; heartbeat and store_access missing; text ordering on `_seq` must change |
 | A11 | Incremental `fct_alert`, `fct_alert_history` | Dev 3 | C3, A10 | ⏳ Not started | Done when AT-18 passes |
