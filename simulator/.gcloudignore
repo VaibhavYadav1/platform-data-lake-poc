@@ -1,0 +1,7 @@
+# Files `gcloud builds submit simulator/` leaves out of the image build (A8)
+.gcloudignore
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+test_*.py

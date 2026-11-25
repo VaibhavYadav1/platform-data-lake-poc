@@ -31,4 +31,5 @@ module "night_off" {
   orchestrator_service_account_email = var.orchestrator_service_account_email
   schedule_time_zone                 = var.schedule_time_zone
   schedule_paused                    = var.night_off_schedule_paused
+  simulator_scheduler_jobs           = [google_cloud_scheduler_job.simulator_tick.name] # A8: poc-simulator-tick
 }

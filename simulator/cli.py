@@ -1,16 +1,19 @@
-"""Command line: python -m simulator seed|batch|crm-export. tick, probe and revoke/grant come with A7, A8, AT-25."""
+"""Command line: python -m simulator seed|batch|tick|crm-export. probe and revoke/grant come with A7 and AT-25.
+
+seed, batch and their state check import the vendored POC 1 generator, which needs `data-lake-schema` from the
+Phase 1 registry. They are imported only when those commands run, so `tick` works in the cloud image, which
+installs only requirements-runtime.txt (A8).
+"""
 
 import argparse
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .batches import BatchError, run_batch
 from .config import Settings
 from .crm_export import CRMExportError, CRMState, generate_export, upload_to_gcs, write_export_folder
 from .db import connect
-from .seed import SeedError, seed
-from .state import snapshot
 
 EXPECTED = Path(__file__).resolve().parent / "expected"
 
@@ -31,7 +34,10 @@ def parse_args(argv):
     b.add_argument("--n", type=int, required=True, choices=[1, 2, 3])
     b.add_argument("--write-expected", action="store_true",
                    help="write expected/batch_<n>.json from the result instead of comparing with it")
-    
+
+    t = sub.add_parser("tick", help="one continuous-mode tick (task A8): G2 changes, case events, CRM, heartbeat")
+    t.add_argument("--rate", type=float, default=None, help="scales the changes per tick (default: RATE, else 1.0)")
+
     c = sub.add_parser("crm-export", help="generate CRM export snapshots (task B2)")
     c.add_argument("--bucket", help="GCS bucket name (without gs://)")
     c.add_argument("--prefix", default="crm", help="folder prefix in bucket (default: crm)")
@@ -109,7 +115,14 @@ def main(argv=None):
             traceback.print_exc()
             return 1
     
+    if args.command == "tick":
+        return run_tick_command(args)
+
     # G2 database commands (seed, batch)
+    from .batches import BatchError, run_batch
+    from .seed import SeedError, seed
+    from .state import snapshot
+
     settings = Settings.from_env()
     print(f"G2: {settings.describe()}")
     try:
@@ -140,4 +153,26 @@ def main(argv=None):
                 print(f"  {key}: expected {json.dumps(expected[key])}\n  {key}: actual   {json.dumps(result[key])}")
         return 1
     print(f"matches {path.name}")
+    return 0
+
+
+def run_tick_command(args, env=None):
+    """`tick`: settings from the environment, as the Cloud Run job sets them (guide 10.6)."""
+    from .tick import TickError, run_tick
+
+    env = os.environ if env is None else env
+    rate = args.rate if args.rate is not None else float(env.get("RATE", "1.0"))
+    settings = Settings.from_env(env)
+    print(f"G2: {settings.describe()}")
+    try:
+        with connect(settings) as conn:
+            result = run_tick(conn, rate=rate, case_topic=env.get("CASE_TOPIC") or None,
+                              g2dl_project=env.get("G2DL_PROJECT") or None, crm_bucket=env.get("CRM_BUCKET") or None,
+                              crm_prefix=env.get("CRM_PREFIX", "crm"))
+    except TickError as e:
+        print(f"error: {e}")
+        return 1
+    print(result.summary())
+    print(json.dumps({"opened": result.opened, "updated": result.updated, "closed": result.closed,
+                      "deleted": result.deleted, "moved_device": result.moved_device, "planted": result.planted}))
     return 0

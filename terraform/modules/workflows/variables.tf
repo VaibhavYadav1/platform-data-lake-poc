@@ -55,7 +55,7 @@ variable "datastream_stream_id" {
 variable "simulator_scheduler_jobs" {
   description = "Scheduler job ids of the simulator. Paused at night, resumed first in the morning."
   type        = list(string)
-  default     = ["poc-simulator"]
+  default     = ["poc-simulator-tick"] # A8's scheduler job (guide 5.3); was "poc-simulator", which doesn't exist
 }
 
 variable "delayed_scheduler_jobs" {
