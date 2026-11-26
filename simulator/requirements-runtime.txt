@@ -3,5 +3,5 @@
 # (requirements.txt), and the image build needs no cross-project grant. seed and batch stay local-only.
 psycopg[binary]>=3.2,<4
 google-cloud-storage>=2.16,<4   # CRM export (B2), when CRM_BUCKET is set
-# google-cloud-pubsub           # add with the case-event publisher (A7)
+google-cloud-pubsub>=2.18,<3    # Case event publisher (A7), when CASE_TOPIC is set
 # google-cloud-bigquery         # add with the wheel-event writer (A9)

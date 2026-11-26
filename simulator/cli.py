@@ -1,8 +1,9 @@
-"""Command line: python -m simulator seed|batch|crm-export. tick, probe and revoke/grant come with A7, A8, AT-25."""
+"""Command line: python -m simulator seed|batch|crm-export|case-events|tick. probe and revoke/grant come with A8, AT-25."""
 
 import argparse
 import json
 import os
+import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from .seed import SeedError, seed
 from .state import snapshot
 
 EXPECTED = Path(__file__).resolve().parent / "expected"
+DEFAULT_PROJECT = "gks-datalake-poc2-dev"
 
 
 def expected_path(n):
@@ -42,6 +44,16 @@ def parse_args(argv):
     c.add_argument("--plant-issues", action="store_true", help="plant DQ issues for testing")
     c.add_argument("--seed", type=int, default=42, help="random seed for reproducibility")
     c.add_argument("--start-time", help="first export timestamp (YYYYMMDDTHHMMSSZ), default: now")
+
+    # Case events command (A7)
+    ce = sub.add_parser("case-events", help="publish case events to Pub/Sub (task A7)")
+    ce.add_argument("--topic", required=True, help="full topic path: projects/PROJECT/topics/TOPIC")
+    ce.add_argument("--count", type=int, default=5, help="number of events to publish (default: 5)")
+    ce.add_argument("--seed", type=int, help="random seed for reproducibility")
+
+    # Tick command (A8)
+    t = sub.add_parser("tick", help="run one continuous-mode tick (task A8)")
+    t.add_argument("--rate", type=float, help="rate multiplier (default: from RATE env var, or 1.0)")
 
     for name, verb in (("grant", "add"), ("revoke", "remove")):
         a = sub.add_parser(name, help=f"{verb} one g2.store_access row: this principal may see this CRM account (D3, D6)")
@@ -118,6 +130,30 @@ def main(argv=None):
             traceback.print_exc()
             return 1
 
+    # Case events command (A7)
+    if args.command == "case-events":
+        try:
+            from .case_events import publish_case_events
+
+            rng = random.Random(args.seed) if args.seed else random.Random()
+            print(f"Publishing {args.count} case events to {args.topic}")
+            
+            count = publish_case_events(args.topic, args.count, rng)
+            
+            print(f"✅ Published {count} messages successfully")
+            if count > args.count:
+                print(f"   (includes {count - args.count} duplicates for DQ35 testing)")
+            return 0
+
+        except ImportError as e:
+            print(f"error: google-cloud-pubsub not installed: {e}")
+            return 1
+        except Exception as e:
+            print(f"error: {e}")
+            import traceback
+            traceback.print_exc()
+            return 1
+
     if args.command == "tick":
         return run_tick_command(args)
 
@@ -187,3 +223,10 @@ def run_tick_command(args, env=None):
     print(json.dumps({"opened": result.opened, "updated": result.updated, "closed": result.closed,
                       "deleted": result.deleted, "moved_device": result.moved_device, "planted": result.planted}))
     return 0
+
+
+def run_store_access(conn, command, principal=None, account=None, project=None, dry_run=False):
+    """Placeholder for store access commands (grant, revoke, store-access-seed)."""
+    print(f"error: {command} command not yet implemented (task AT-25)")
+    return 1
+
