@@ -34,9 +34,11 @@ sources:
           error_after: {count: 30, period: minute}
         columns: [{name: history_id, data_tests: [not_null]}]
       - name: g2_store_access
+        config:
+          enabled: false  # Table not available yet
         columns:
-          - {name: principal, data_tests: [not_null]}
-          - {name: crm_account_id, data_tests: [not_null]}
+          - {name: principal}
+          - {name: crm_account_id}
       - name: g2_heartbeat
         freshness:   # the heartbeat row is updated all the time, so it shows whether replication is alive
           warn_after: {count: 8, period: minute}
@@ -61,9 +63,11 @@ sources:
     schema: "{{ var('lpos_raw_dataset', 'raw_lpos') }}"
     tables:
       - name: case_event
+        config:
+          enabled: false  # Dataset not available yet or no access
         loaded_at_field: publish_time
         freshness: {warn_after: {count: 5, period: minute}, error_after: {count: 30, period: minute}}
-        columns: [{name: event_id, data_tests: [not_null]}]
+        columns: [{name: event_id}]
 
   - name: sim_g2_datalake
     database: "{{ var('g2dl_project', target.project) }}"

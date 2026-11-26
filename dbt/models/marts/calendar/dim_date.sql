@@ -1,4 +1,7 @@
-{{ config(tags=['daily']) }}
+-- dim_date: Date dimension generated from dbt_utils.date_spine
+-- Not tagged as 'daily' because other models depend on it
+-- Uses full_refresh=false to avoid expensive rebuilds on every run
+{{ config(full_refresh=false) }}
 with d as (
   select cast(date_day as date) as date_day
   from (

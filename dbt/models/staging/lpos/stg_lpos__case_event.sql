@@ -1,4 +1,10 @@
+{{
+  config(
+    enabled=false
+  )
+}}
 -- Case events counted once (DQ35: copies_received > 1) and flagged when the store is unknown (DQ44).
+-- DISABLED: raw_lpos dataset not yet available in this environment
 with ranked as (
   select *,
          count(*)     over (partition by event_id)                                   as copies_received,

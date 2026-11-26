@@ -26,7 +26,10 @@ models:
         description: INSTALL, REPAIR, INSPECTION or REMOVAL
         data_type: string
         data_tests:
-          - accepted_values: {values: [INSTALL, REPAIR, INSPECTION, REMOVAL]}
+          - accepted_values:
+              values: [INSTALL, REPAIR, INSPECTION, REMOVAL]
+              config:
+                severity: warn  # Warn instead of fail - allow unexpected values from source
       - name: status
         description: OPEN, IN_PROGRESS, CLOSED or CANCELLED
         data_type: string

@@ -1,1 +1,16 @@
 scenario_id,store_id,after_step,expected_status_color,expected_status_reason,expected_driving_rule_id,description
+GS01,S101,baseline,GREEN,GREEN_NO_OPEN_ALERTS,,No open incidents so the store is healthy
+GS02,S102,baseline,RED,RED_CRITICAL,R01,Protection Offline (AT01) at a main door so main exit unprotected
+GS03,S103,baseline,RED,RED_CRITICAL,R03,Device Offline (AT02) at a main door open for 2 hours
+GS04,S104,baseline,YELLOW,YELLOW_DEGRADED,R02,Protection Offline (AT01) at a side door only so main exits still covered
+GS05,S105,baseline,RED,RED_CRITICAL,R05,Connectivity Offline (AT03) router loss at any location affects every device
+GS06,S106,baseline,RED,RED_CRITICAL,R06,No A/C Power (AT04) at priority P1 so battery about to run out
+GS07,S107,baseline,YELLOW,YELLOW_DEGRADED,R07,No A/C Power (AT04) at priority P3 runs on battery
+GS08,S108,baseline,YELLOW,YELLOW_DEGRADED,R10,High Wheel Events (AT06) only so wheels need service soon
+GS09,S109,baseline,GREEN,GREEN_INFO_ONLY,R12,Low Wheel Events (AT08) only so open incident is informational
+GS10,S110,baseline,RED,RED_CRITICAL,R01,Worst colour wins: main door Protection Offline (RED) plus High Wheel Events (YELLOW)
+GS11,S111,baseline,RED,RED_CRITICAL,R13,Device Disabled (AT09) switched off at the store so store must act
+GS12,S112,baseline,YELLOW,YELLOW_UNCLASSIFIED,,Open incident whose alert type has no rule so colour defaults to YELLOW (confirm the alert type with the rules owner)
+GS13,S102,batch-1,GREEN,GREEN_NO_OPEN_ALERTS,,Same store as GS02 after its incident is closed so it returns to healthy
+GS14,S104,batch-1,RED,RED_CRITICAL,R01,Same store as GS04 after the side door alert is joined by a main door alert so colour rises to RED
+GS15,S110,batch-1,YELLOW,YELLOW_DEGRADED,R10,Same store as GS10 after the RED incident is closed so only the YELLOW one remains
