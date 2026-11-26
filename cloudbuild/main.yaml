@@ -38,7 +38,7 @@ steps:
         fi
         img=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/dbt-runner
         # Context is the repo root: the image copies dbt/ and orchestration/publish/
-        docker build -f dbt/Dockerfile -t "$$img:$COMMIT_SHA" -t "$$img:latest" .
+        docker build -f dbt/Dockerfile --build-arg GIT_SHA=$COMMIT_SHA -t "$$img:$COMMIT_SHA" -t "$$img:latest" .
         docker push "$$img" --all-tags
 
   - id: image-crm-loader
@@ -53,7 +53,22 @@ steps:
           echo "SKIPPED image-crm-loader: loaders/crm/Dockerfile not merged yet (B3)"; exit 0
         fi
         img=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/crm-loader
-        docker build -f loaders/crm/Dockerfile -t "$$img:$COMMIT_SHA" -t "$$img:latest" loaders/crm
+        docker build -f loaders/crm/Dockerfile --build-arg GIT_SHA=$COMMIT_SHA -t "$$img:$COMMIT_SHA" -t "$$img:latest" loaders/crm
+        docker push "$$img" --all-tags
+
+  - id: image-simulator
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -eu
+        if [ ! -f simulator/Dockerfile ]; then
+          echo "SKIPPED image-simulator: simulator/Dockerfile not found"; exit 0
+        fi
+        img=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/poc-source-simulator
+        docker build -f simulator/Dockerfile -t "$$img:$COMMIT_SHA" simulator
         docker push "$$img" --all-tags
 
   # ---------------------------------------------------------------- Terraform
@@ -61,7 +76,7 @@ steps:
   # quick merges queue behind each other on the state lock instead of failing.
   - id: apply-shared
     name: ${_TF_IMAGE}
-    waitFor: [image-dbt-runner, image-crm-loader]
+    waitFor: [image-dbt-runner, image-crm-loader, image-simulator]
     dir: terraform/shared
     entrypoint: sh
     env: ["TF_VAR_image_tag=$COMMIT_SHA"]

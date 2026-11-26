@@ -194,6 +194,16 @@ class Warehouse:
         job.result()
         return job.output_rows
 
+    def count_export(self, ts: datetime) -> dict[str, int]:
+        """Rows now in each landing table for this export_ts, by file name."""
+        counts = {}
+        for fname, table in FILE_TABLE.items():
+            job = self.bq.query(
+                f"SELECT COUNT(*) AS n FROM `{self.ds}.{table}` WHERE export_ts = @ts",
+                job_config=bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("ts", "TIMESTAMP", ts)]))
+            counts[fname] = next(iter(job.result())).n
+        return counts
+
     def delete_export(self, ts: datetime) -> None:
         for table in FILE_TABLE.values():
             self.bq.query(
@@ -264,6 +274,12 @@ def run(bucket: str, prefix: str, project: str, dataset: str, location: str, app
                 rows[fname] = wh.load_csv(folder + fname, table)
                 if rows[fname] != expected_rows[fname]:
                     raise LoaderError(f"{fname}: loaded {rows[fname]} rows, the file has {expected_rows[fname]}")
+            # Two loaders running at once (a manual run during a scheduled one) would each delete, then both load:
+            # the tables would hold the export twice. The count catches that, the export is removed and retried.
+            in_tables = wh.count_export(ts)
+            if in_tables != expected_rows:
+                raise LoaderError(f"tables hold {in_tables} rows for this export, the files have {expected_rows}: "
+                                  "another loader may be running")
             wh.log(ts, folder, LOADED, file_count=3, rows=rows, ratio=ratio, approved=approved)
             states[ts] = State(LOADED, approved)
             print(f"{name}: LOADED {rows}" + (f" (change ratio {ratio:.2f})" if ratio is not None else " (first export)"))

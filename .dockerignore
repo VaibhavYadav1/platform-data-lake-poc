@@ -1,0 +1,12 @@
+# Repository-root build context: only the dbt runner image (dbt/Dockerfile) uses it. The other images
+# (simulator/, loaders/crm/) have their own context and their own ignore files.
+*
+!dbt
+!orchestration/publish
+**/__pycache__
+**/*.pyc
+dbt/target
+dbt/logs
+dbt/dbt_packages
+dbt/.env
+orchestration/publish/tests

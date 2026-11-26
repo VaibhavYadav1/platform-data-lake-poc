@@ -29,7 +29,7 @@ variable "simulator_case_topic" {
 }
 
 variable "simulator_crm_bucket" {
-  description = "CRM landing bucket for the hourly export (B2). Empty = CRM export off."
+  description = "CRM landing bucket for the hourly export (B2): the crm_exports bucket of crm_exports.tf. Empty = CRM export off."
   type        = string
   default     = ""
 }
@@ -123,6 +123,7 @@ resource "google_cloud_run_v2_job" "simulator" {
   depends_on = [
     google_project_iam_member.simulator_sql_client,
     google_secret_manager_secret_iam_member.simulator_password,
+    google_storage_bucket_iam_member.simulator_writes_crm,
   ]
 }
 

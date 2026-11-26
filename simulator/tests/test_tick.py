@@ -106,13 +106,17 @@ def test_failed_step_leaves_heartbeat_stale(seeded):
     assert beat2 == beat
 
 
-def test_crm_hook_only_on_first_tick_of_the_hour(seeded, monkeypatch):
+def test_crm_hook_runs_on_every_tick(seeded, monkeypatch):
+    """Every tick asks for the missing exports, so a delayed tick (minute 7, 25, ...) still writes the hour."""
     calls = []
     monkeypatch.setattr(tick, "write_crm_export", lambda bucket, prefix, now: calls.append(now) or "gs://b/crm/x")
     with psycopg.connect(**seeded) as conn:
         tick.run_tick(conn, rate=0, crm_bucket="b", now=datetime(2026, 11, 25, 10, 7, tzinfo=timezone.utc))
         r = tick.run_tick(conn, rate=0, crm_bucket="b", now=datetime(2026, 11, 25, 11, 2, tzinfo=timezone.utc))
-    assert len(calls) == 1 and r.crm_export == "gs://b/crm/x"
+    assert len(calls) == 2 and r.crm_export == "gs://b/crm/x"
+    with psycopg.connect(**seeded) as conn:
+        r = tick.run_tick(conn, rate=0, crm_bucket=None, now=datetime(2026, 11, 25, 12, 2, tzinfo=timezone.utc))
+    assert len(calls) == 2 and r.crm_export == "no"  # no bucket: the export stays off
 
 
 def test_cli_tick(seeded, monkeypatch):

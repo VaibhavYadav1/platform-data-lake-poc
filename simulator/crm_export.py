@@ -394,5 +394,13 @@ def upload_to_gcs(bucket_name: str, prefix: str, export_time: datetime, csv_file
     return f"gs://{bucket_name}/{folder_path}"
 
 
+def export_exists(bucket_name: str, prefix: str, export_time: datetime) -> bool:
+    """True when this hour's export is complete: its manifest.json (written last) is in the bucket."""
+    from google.cloud import storage
+
+    ts_name = export_time.strftime("%Y%m%dT%H%M%SZ")
+    return storage.Client().bucket(bucket_name).blob(f"{prefix}/export_ts={ts_name}/manifest.json").exists()
+
+
 class CRMExportError(Exception):
     pass
