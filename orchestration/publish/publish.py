@@ -423,6 +423,13 @@ def publish(
         build_cols = get_columns(runner, cfg, "build", t.name)
         if not build_cols:
             raise PublishError(f"{t.name}: not found in {cfg.ds('build')}")
+        # A wh table with no row policy shows every row to every reader (D4). A table that carries
+        # tenant_id is tenant data, so it must be tenant_scoped; forgetting the flag must not open it.
+        if t.dataset == "wh" and not t.tenant_scoped and "tenant_id" in dict(build_cols):
+            raise PublishError(
+                f"{t.name}: has a tenant_id column but is not tenant_scoped in tables.yaml, so it would "
+                "get no row policy and every reader would see every tenant. Nothing was published."
+            )
         plan = TablePlan(t, build_cols)
         if t.is_fact:
             types = dict(build_cols)

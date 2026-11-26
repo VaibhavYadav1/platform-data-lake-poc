@@ -38,6 +38,9 @@ tables:
 
 # Native materialized views, created by publish.py if missing (C11, Dev 1).
 # The dbt versions of these two stay in build_<env> for comparison.
-objects:
-  - objects/mv_alert_trend_daily.sql
-  - objects/mv_cart_count_daily.sql
+# Off until spike 4 (Dev 1) proves tenants see only their own rows through a native view over a table with row
+# policies (POC D, docs/poc2/spikes.md). The views get no row policy of their own and the publish checks don't
+# cover them, so enabling them before that could show every tenant's rows. Re-enable by restoring the two lines.
+objects: []
+#  - objects/mv_alert_trend_daily.sql
+#  - objects/mv_cart_count_daily.sql

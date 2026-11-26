@@ -1,7 +1,7 @@
 {{ config(tags=['dq41_value_scan']) }}
 -- DQ41, value part (error): no email-like value in any text column of the build dataset.
 -- The column-name part is dq41_no_personal_data_columns. Free text (fct_alert_history.comments) is the main risk.
--- Columns in var pii_value_scan_allow hold emails by design (map_tenant_access.principal, decision 3) and are skipped.
+-- Columns listed in var pii_value_scan_allow hold emails by design and are skipped (none today: map_tenant_access stores hashes).
 -- It reads every text column, so the daily full load runs it (plan E6 step 5); the micro-batch may skip it with
 -- --exclude tag:dq41_value_scan.
 -- The scan reads build through INFORMATION_SCHEMA, which dbt cannot see as a dependency. Without the lines
@@ -31,7 +31,16 @@
 {% set allow = var('pii_value_scan_allow') %}
 {% set email_regex = "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}" %}
 {% set cols = [] %}
+{% set build_schema = generate_schema_name('build', none) %}
+{% set build_exists = false %}
 {% if execute %}
+  {# In a new environment the build dataset doesn't exist until the first build; reading its column list would
+     then fail `dbt compile` and `dbt build --select` of unrelated nodes. No dataset means nothing to scan. #}
+  {% set found = run_query("select count(*) from `" ~ target.project ~ "`.`region-" ~ target.location | lower
+                           ~ "`.INFORMATION_SCHEMA.SCHEMATA where schema_name = '" ~ build_schema ~ "'") %}
+  {% set build_exists = found.columns[0].values()[0] > 0 %}
+{% endif %}
+{% if build_exists %}
   {% set q %}
     select table_name, column_name
     from `{{ target.project }}`.`{{ generate_schema_name('build', none) }}`.INFORMATION_SCHEMA.COLUMNS
