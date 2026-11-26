@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+tests
+README.md
+make_test_exports.py
+.pytest_cache

@@ -8,7 +8,7 @@ Steps, in order:
    defects: an unknown device (DQ33) or a time in the future (DQ34).
 2. Case events (A7), only when CASE_TOPIC is set.
 3. Wheel events (A9), only when G2DL_PROJECT is set. A9 isn't built yet, so setting it fails the tick.
-4. CRM export (B2), only when CRM_BUCKET is set, on the first tick after each full hour.
+4. CRM export (B2), only when CRM_BUCKET is set: each tick writes any missing export of this hour and the last few.
 5. The heartbeat, last and in its own transaction, so a failed step above leaves it stale and the watchdog sees it.
 
 RATE scales the counts (1.0 = as above, 0 = heartbeat and one case event only).
@@ -243,13 +243,31 @@ def publish_case_events(topic, n, rng):
     return publish(topic, n, rng)
 
 
-def write_crm_export(bucket, prefix, now):
-    from .crm_export import CRMState, generate_export, upload_to_gcs
+# An hourly export is written by the first tick that finds it missing, not only by a tick in the first five minutes
+# of the hour: a delayed, skipped or failed tick (max_retries is 0) must not lose an hour. After an outage the
+# hours that were missed within this many hours are written too, oldest first.
+CRM_CATCHUP_HOURS = 3
 
-    export_time = now.replace(minute=0, second=0, microsecond=0)
-    state = CRMState.initialize(n_accounts=50, n_stores=100, seed=42)
-    files = generate_export(state=state, export_time=export_time, change_rate=0.1)
-    return upload_to_gcs(bucket, prefix, export_time, files)
+
+def write_crm_export(bucket, prefix, now):
+    """Write the export of `now`'s hour, and of any of the previous CRM_CATCHUP_HOURS hours, that has no manifest yet.
+
+    The manifest is written last, so "has a manifest" means "complete"; a folder without one is a half-written
+    export and is written again. A complete export is never touched, so a re-run cannot change what the loader
+    already saw. Returns the folders written, or "up-to-date".
+    """
+    from .crm_export import CRMState, export_exists, generate_export, upload_to_gcs
+
+    this_hour = now.replace(minute=0, second=0, microsecond=0)
+    written = []
+    for back in range(CRM_CATCHUP_HOURS, -1, -1):
+        export_time = this_hour - timedelta(hours=back)
+        if export_exists(bucket, prefix, export_time):
+            continue
+        state = CRMState.initialize(n_accounts=50, n_stores=100, seed=42)
+        files = generate_export(state=state, export_time=export_time, change_rate=0.1)
+        written.append(upload_to_gcs(bucket, prefix, export_time, files))
+    return ", ".join(written) if written else "up-to-date"
 
 
 def run_tick(conn, rate=1.0, case_topic=None, g2dl_project=None, crm_bucket=None, crm_prefix="crm",
@@ -283,8 +301,8 @@ def run_tick(conn, rate=1.0, case_topic=None, g2dl_project=None, crm_bucket=None
     if g2dl_project:
         raise TickError("G2DL_PROJECT is set, but wheel events (task A9) aren't built yet")
 
-    # 4. CRM (B2): the first tick after each full hour (ticks are 5 minutes apart)
-    if crm_bucket and now.minute < 5:
+    # 4. CRM (B2): every tick checks that this hour's export (and the last few) exists, and writes what is missing
+    if crm_bucket:
         result.crm_export = write_crm_export(crm_bucket, crm_prefix, now)
 
     # 5. Heartbeat, last

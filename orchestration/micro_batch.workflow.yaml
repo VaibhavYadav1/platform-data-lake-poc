@@ -8,6 +8,9 @@
 # The dbt work runs in the Cloud Run job poc-dbt-runner-<env> (E3): `microbatch` is dbt build and,
 # only if dbt exited 0, publish.py (E5). The job has max_retries = 0; this workflow decides what a
 # failure means:
+#   - load_crm: the loader (poc-crm-loader) gets its bucket and project as command-line arguments. It exits 0 when it
+#     HOLDS an export (change-size guard, DQ42): later exports wait behind the held one, the workflow goes on, and dbt
+#     builds from what was loaded last. It exits 1 when an export FAILED: the workflow stops here and dbt does not run.
 #   - load_crm, build_publish, freshness: a failure fails the workflow (so the "failed poc-*
 #     workflow" alert fires), after the failed step is logged;
 #   - freshness_src: warn only. A stale source is reported, it does not stop the build.
@@ -15,12 +18,12 @@
 # single_run: if an older execution of this workflow is still ACTIVE, this one logs SKIPPED and
 # returns. The oldest active execution always runs, so two overlapping runs never both skip.
 #
-# Settings: Terraform sets the environment variables POC_ENV and POC_RUN_CRM_LOADER on each
+# Settings: Terraform sets the environment variables POC_ENV, POC_RUN_CRM_LOADER and POC_CRM_BUCKET on each
 # workflow (dev runs the CRM loader, int does not). A caller can override any of them in args.
 #
 # Run by hand:  gcloud workflows run poc-micro-batch-dev --location us-central1 --data='{}'
 # Arguments (all optional):
-#   env, location, run_crm_loader (bool), run_freshness (bool), dbt_job, crm_job,
+#   env, location, run_crm_loader (bool), run_freshness (bool), dbt_job, crm_job, crm_bucket, crm_prefix,
 #   dbt_timeout_seconds, crm_timeout_seconds
 main:
   params: [args]
@@ -44,6 +47,8 @@ main:
           - run_freshness: ${default(map.get(cfg, "run_freshness"), true)}
           - dbt_job: ${default(map.get(cfg, "dbt_job"), "poc-dbt-runner-" + env_name)}
           - crm_job: ${default(map.get(cfg, "crm_job"), "poc-crm-loader")}
+          - crm_bucket: ${default(map.get(cfg, "crm_bucket"), sys.get_env("POC_CRM_BUCKET", ""))}
+          - crm_prefix: ${default(map.get(cfg, "crm_prefix"), "crm")}
           # The dbt job's own timeout is 15 minutes; wait a little longer than that.
           - dbt_timeout_seconds: ${default(map.get(cfg, "dbt_timeout_seconds"), 1200)}
           - crm_timeout_seconds: ${default(map.get(cfg, "crm_timeout_seconds"), 900)}
@@ -118,12 +123,29 @@ main:
         switch:
           - condition: ${run_crm_loader}
             steps:
+              # No bucket is a setup error, not a reason to skip: a silent skip is how an unfilled raw_crm goes unnoticed.
+              - check_crm_bucket:
+                  switch:
+                    - condition: ${crm_bucket == ""}
+                      steps:
+                        - log_no_crm_bucket:
+                            call: log_step
+                            args:
+                              ctx: ${ctx}
+                              step_order: 2
+                              step: "load_crm"
+                              entity: ${crm_job}
+                              status: "FAILED"
+                              error: "run_crm_loader is true but no crm_bucket is set (POC_CRM_BUCKET or the crm_bucket argument)"
+                              started: ${sys.now()}
+                        - raise_no_crm_bucket:
+                            raise: "run_crm_loader is true but no crm_bucket is set"
               - run_crm_loader_job:
                   call: run_job
                   args:
                     ctx: ${ctx}
                     job: ${crm_job}
-                    job_args: null
+                    job_args: ${["--bucket", crm_bucket, "--prefix", crm_prefix, "--project", project_id]}
                     timeout: ${crm_timeout_seconds}
                     step_order: 2
                     step: "load_crm"

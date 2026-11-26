@@ -19,6 +19,7 @@ resource "google_workflows_workflow" "micro_batch" {
   user_env_vars = {
     POC_ENV            = var.env
     POC_RUN_CRM_LOADER = tostring(var.run_crm_loader)
+    POC_CRM_BUCKET     = var.crm_bucket
   }
 
   labels = {

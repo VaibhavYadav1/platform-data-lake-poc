@@ -22,6 +22,12 @@ variable "run_crm_loader" {
   default     = false
 }
 
+variable "crm_bucket" {
+  description = "Bucket poc-crm-loader reads: the crm_exports bucket created in terraform/shared/crm_exports.tf. Required while run_crm_loader is true."
+  type        = string
+  default     = ""
+}
+
 variable "micro_batch_schedule_paused" {
   description = "Keep the micro-batch scheduler job paused. Set to false after the workflow has been run by hand once."
   type        = bool
@@ -37,5 +43,6 @@ module "micro_batch" {
   orchestrator_service_account_email = var.orchestrator_service_account_email
   schedule                           = var.micro_batch_schedule
   run_crm_loader                     = var.run_crm_loader
+  crm_bucket                         = var.crm_bucket
   schedule_paused                    = var.micro_batch_schedule_paused
 }
