@@ -16,11 +16,13 @@ resource "google_service_account" "cloudbuild" {
 
 resource "google_project_iam_member" "cloudbuild" {
   for_each = toset([
-    "roles/logging.logWriter",    # build logs (pr.yaml uses CLOUD_LOGGING_ONLY)
-    "roles/viewer",               # terraform plan refreshes state by reading resources
-    "roles/bigquery.dataEditor",  # dbt build into dbt_pr_* datasets; bq mk creates them
-    "roles/bigquery.jobUser",     # run BigQuery jobs
-    "roles/iam.securityReviewer", # plan reads IAM policies
+    "roles/logging.logWriter",          # build logs (pr.yaml uses CLOUD_LOGGING_ONLY)
+    "roles/viewer",                     # terraform plan refreshes state by reading resources
+    "roles/bigquery.dataEditor",        # dbt build into dbt_pr_* datasets; bq mk creates them
+    "roles/bigquery.jobUser",           # run BigQuery jobs
+    "roles/iam.securityReviewer",       # plan reads IAM policies
+    "roles/secretmanager.viewer",       # plan reads secret metadata (datastream_pg module)
+    "roles/secretmanager.secretAccessor", # plan reads secret version value (datastream password)
   ])
 
   project = var.project_id
