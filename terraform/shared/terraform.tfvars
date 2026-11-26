@@ -9,4 +9,4 @@ simulator_image = "us-central1-docker.pkg.dev/gks-datalake-poc2-dev/poc/poc-sour
 simulator_crm_bucket = "gks-datalake-poc2-dev-crm-exports"
 
 # E1, E2: Cloud Build triggers enabled
-cloudbuild_triggers_disabled = false
+cloudbuild_triggers_disabled = true
