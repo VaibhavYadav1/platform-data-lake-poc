@@ -13,6 +13,7 @@ ALLOWED = {
     REPO / "dbt" / "seeds" / "map_customer_type.csv",
     REPO / "dbt" / "macros" / "is_customer.sql",
     REPO / "dbt" / "seeds" / "seeds.yml",           # documents the seed
+    REPO / "dbt" / "models" / "validation_e2e_unit_tests.yml",  # unit test fixtures, not a definition
     Path(__file__).resolve(),
 }
 SCAN = [REPO / "dbt" / d for d in ("models", "macros", "tests", "seeds")] + [REPO / "scripts", REPO / "orchestration"]
