@@ -106,31 +106,56 @@
    - Must be opaque (never actual names)
    - Requires anonymization for external sharing
 
-### JSON Encoding for Nullable Fields
+### JSON Encoding for Nullable Fields ✅
 
-**Testing Required:** During A6 implementation, test both formats:
+**Status:** CONFIRMED via A6 Step 5 testing (2026-11-26)
 
-**Wrapped Format (Avro standard):**
+**Result:** Google Pub/Sub with Avro schema validation requires **WRAPPED format** for union types.
+
+**Wrapped Format (REQUIRED):**
 
 ```json
 {
+  "event_id": "evt-001",
+  "case_id": "case-001",
+  "event_type": "CASE_OPENED",
+  "event_ts": 1704067200000000,
+  "g2_store_id": "store-123",
+  "case_status": "OPEN",
   "offender_token": { "string": "tok-abc" },
   "loss_amount": { "double": 240.5 },
   "items_count": { "int": 3 }
 }
 ```
 
-**Plain Format:**
+**For null values, use JSON null:**
 
 ```json
 {
-  "offender_token": "tok-abc",
-  "loss_amount": 240.5,
-  "items_count": 3
+  "offender_token": null,
+  "loss_amount": null,
+  "items_count": null
 }
 ```
 
-**Result:** [TO BE FILLED IN A6 STEP 5] - Use ****\_**** format in A7 publisher
+**Critical Rules:**
+
+1. **ALL fields must be present** in the JSON payload, even nullable ones
+2. **Non-null union values must be wrapped**: `{"type": value}`
+   - `{"string": "value"}` for string fields
+   - `{"double": 123.45}` for double fields
+   - `{"int": 42}` for int fields
+3. **Null values use plain JSON null**: `"fieldName": null`
+4. **Missing fields cause validation failure** even if they have defaults in Avro schema
+
+**Test Results:**
+
+- ✓ Message with all nulls: SUCCESS
+- ✓ Message with wrapped non-null values: SUCCESS
+- ✗ Message with plain (unwrapped) values: REJECTED (schema validation failed)
+- ✗ Message with missing nullable fields: REJECTED (field not found error)
+
+**A7 Implementation:** Use wrapped format for all nullable fields with non-null values
 
 ### Data Quality Rules
 
@@ -172,11 +197,13 @@
 
 ### Implementation Status
 
-- [x] Schema confirmed from main branch dbt models
+- [x] Schema confirmed from main branch dbt models (Task 0.7)
 - [x] Documented in specs.md (Task 0.7)
-- [ ] Avro schema file created (A6 Step 1)
-- [ ] JSON encoding tested (A6 Step 5)
-- [ ] Publisher implemented with confirmed encoding (A7)
+- [x] Avro schema file created (A6 Step 1)
+- [x] Pub/Sub infrastructure deployed (A6 Steps 2-4)
+- [x] JSON encoding tested and confirmed (A6 Step 5-6)
+- [ ] Publisher implemented with wrapped encoding (A7)
+- [ ] Cloud deployment with sa-simulator (A8)
 
 ---
 
