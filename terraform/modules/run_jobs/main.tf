@@ -119,8 +119,8 @@ resource "google_cloud_run_v2_job" "crm_loader" {
 
     template {
       service_account = var.crm_loader_service_account_email != "" ? var.crm_loader_service_account_email : null
-      timeout         = "900s"   # 15 minutes; the workflow waits up to crm_timeout_seconds
-      max_retries     = 0        # same reason as dbt_runner: workflow handles failures
+      timeout         = "900s" # 15 minutes; the workflow waits up to crm_timeout_seconds
+      max_retries     = 0      # same reason as dbt_runner: workflow handles failures
 
       containers {
         image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/crm-loader:${var.crm_loader_image_tag}"
