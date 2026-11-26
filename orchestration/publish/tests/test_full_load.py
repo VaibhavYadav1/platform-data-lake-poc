@@ -66,7 +66,7 @@ def commands(monkeypatch):
     return ran
 
 
-FACTS = ["fct_alert", "fct_alert_history"]
+FACTS = ["fct_alert", "fct_alert_history", "fct_work_order", "fct_case", "fct_wheel_event"]
 
 
 def go(runner, commands, facts=FACTS):
@@ -76,9 +76,11 @@ def go(runner, commands, facts=FACTS):
 # ------------------------------------------------------------------------------ the sequence
 def test_the_steps_run_in_the_plans_order(commands):
     events = []
+    # Use only two facts so the assertion stays concise
+    facts = ["fct_alert", "fct_alert_history"]
     r = FakeRunner(events=events)
     commands["events"] = events
-    assert go(r, commands) == 0
+    assert fl.run_full_load(r, "proj", "dev", "run-1", facts, "sha1") == 0
     order = [e for e in events if e != "list_string_columns"]
     assert order == [
         "clone:fct_alert",
@@ -100,7 +102,7 @@ def test_it_runs_dbt_full_refresh_and_publish_all(commands):
 
 
 def test_facts_come_from_tables_yaml():
-    assert fl.load_facts() == ["fct_alert", "fct_alert_history"]
+    assert fl.load_facts() == FACTS
 
 
 def test_dq39_table_is_created_before_anything_is_written():
@@ -117,7 +119,7 @@ def test_each_fact_is_cloned_from_build_to_ops(commands):
     go(r, commands)
     clones = [s for s in r.sqls if s.startswith("CREATE OR REPLACE TABLE")]
     assert clones[0] == "CREATE OR REPLACE TABLE `proj.ops_dev.prev_fct_alert` CLONE `proj.build_dev.fct_alert`"
-    assert len(clones) == 2
+    assert len(clones) == len(FACTS)
 
 
 # -------------------------------------------------------------------------------------- DQ39

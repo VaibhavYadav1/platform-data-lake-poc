@@ -45,6 +45,7 @@ main:
           - env_name: ${default(map.get(cfg, "env"), sys.get_env("POC_ENV", "dev"))}
           - run_crm_loader: ${default(map.get(cfg, "run_crm_loader"), sys.get_env("POC_RUN_CRM_LOADER", "false") == "true")}
           - run_freshness: ${default(map.get(cfg, "run_freshness"), true)}
+          - dbt_vars: ${map.get(cfg, "dbt_vars")}
           - dbt_job: ${default(map.get(cfg, "dbt_job"), "poc-dbt-runner-" + env_name)}
           - crm_job: ${default(map.get(cfg, "crm_job"), "poc-crm-loader")}
           - crm_bucket: ${default(map.get(cfg, "crm_bucket"), sys.get_env("POC_CRM_BUCKET", ""))}
@@ -176,12 +177,23 @@ main:
           warn_only: true
 
     # ---- build_publish: dbt build, then publish.py if dbt exited 0 --------------------------
+    # E11 passes dbt_vars to force a failure in the middle of the build. entrypoint.sh hands the
+    # extra arguments to `dbt build`. Only this step gets them: source freshness and the freshness
+    # check are separate dbt calls.
+    - prepare_build_args:
+        assign:
+          - build_args: ["microbatch"]
+    - add_dbt_vars:
+        switch:
+          - condition: ${dbt_vars != null}
+            assign:
+              - build_args: ${["microbatch", "--vars", dbt_vars]}
     - build_publish:
         call: run_job
         args:
           ctx: ${ctx}
           job: ${dbt_job}
-          job_args: ["microbatch"]
+          job_args: ${build_args}
           timeout: ${dbt_timeout_seconds}
           step_order: 4
           step: "build_publish"
