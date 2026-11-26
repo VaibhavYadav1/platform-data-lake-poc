@@ -1,8 +1,4 @@
 # E4: the micro-batch workflow and its scheduler, once per environment.
-#
-# Prerequisites that other tasks own: sa-orchestrator (D2), poc-dbt-runner-<env> (E3),
-# poc-crm-loader (B3). Until they exist the workflow deploys but cannot run, and the scheduler job
-# stays paused.
 
 variable "orchestrator_service_account_email" {
   description = "sa-orchestrator. Created by the service_accounts module (D2); until then, by hand."
@@ -14,18 +10,6 @@ variable "micro_batch_schedule" {
   description = "Cron for the micro-batch scheduler job: every 15 minutes in dev, hourly in int."
   type        = string
   default     = "0 * * * *"
-}
-
-variable "run_crm_loader" {
-  description = "Run poc-crm-loader at the start of every micro-batch. True in dev, false in int."
-  type        = bool
-  default     = false
-}
-
-variable "crm_bucket" {
-  description = "Bucket poc-crm-loader reads: the crm_exports bucket created in terraform/shared/crm_exports.tf. Required while run_crm_loader is true."
-  type        = string
-  default     = ""
 }
 
 variable "micro_batch_schedule_paused" {
@@ -42,7 +26,5 @@ module "micro_batch" {
   env                                = var.env
   orchestrator_service_account_email = var.orchestrator_service_account_email
   schedule                           = var.micro_batch_schedule
-  run_crm_loader                     = var.run_crm_loader
-  crm_bucket                         = var.crm_bucket
   schedule_paused                    = var.micro_batch_schedule_paused
 }

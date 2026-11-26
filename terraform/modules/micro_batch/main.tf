@@ -11,15 +11,13 @@ resource "google_workflows_workflow" "micro_batch" {
   project         = var.project_id
   region          = var.region
   name            = "poc-micro-batch-${var.env}"
-  description     = "E4: CRM loader (dev), source freshness, dbt build and publish, freshness check"
+  description     = "E4: source freshness, dbt build and publish, freshness check"
   service_account = var.orchestrator_service_account_email
   source_contents = replace(file("${path.module}/../../../orchestration/micro_batch.workflow.yaml"), "\r\n", "\n")
 
   # Read by the workflow with sys.get_env. A caller can still override them in the arguments.
   user_env_vars = {
-    POC_ENV            = var.env
-    POC_RUN_CRM_LOADER = tostring(var.run_crm_loader)
-    POC_CRM_BUCKET     = var.crm_bucket
+    POC_ENV = var.env
   }
 
   labels = {
