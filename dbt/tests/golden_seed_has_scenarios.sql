@@ -6,7 +6,13 @@
 {% set seed = ref('golden_store_health') %}
 {% set seed_exists = true %}
 {% if execute %}
-  {% set found = run_query("select count(*) from `" ~ seed.database ~ "`.`" ~ seed.schema ~ "`.INFORMATION_SCHEMA.TABLES where table_name = '" ~ seed.identifier ~ "'") %}
+  {# In a new environment the seed's dataset doesn't exist before the first build; check it first, or the
+     table lookup fails `dbt compile`. #}
+  {% set ds = run_query("select count(*) from `" ~ seed.database ~ "`.`region-" ~ target.location | lower
+                        ~ "`.INFORMATION_SCHEMA.SCHEMATA where schema_name = '" ~ seed.schema ~ "'") %}
+  {% set found = run_query("select count(*) from `" ~ seed.database ~ "`.`" ~ seed.schema
+                           ~ "`.INFORMATION_SCHEMA.TABLES where table_name = '" ~ seed.identifier ~ "'")
+                 if ds.columns[0].values()[0] > 0 else ds %}
   {% set seed_exists = found.columns[0].values()[0] > 0 %}
 {% endif %}
 {% if not seed_exists %}

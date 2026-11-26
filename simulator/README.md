@@ -12,7 +12,7 @@ Scripted mode (`seed`, `batch --n 1..3`) for repeatable tests; continuous mode (
 | Part | Task | State |
 | --- | --- | --- |
 | `seed`, `batch --n 1..3`, `expected/`, `tests/` | 0.6 | Done; verified on PostgreSQL 16 in Docker |
-| `store_access` rows in the seed | 0.6 / A3 | Waiting for the tenant model in `docs/poc2/specs.md` (0.7) |
+| `store_access` rows: `grant`, `revoke`, `store-access-seed` | D3, D6 (AT-25) | Done (offline tests); run on Cloud SQL after `seed` |
 | Cloud SQL connection (`PG_INSTANCE`, `PG_SECRET`) | A3 / A8 | Not yet: use `PG_HOST` through the Auth Proxy |
 | Case-event publisher | A7 | Not started |
 | Dockerfile, `tick`, heartbeat, pause switch, `RATE` | A8 | Not started |
@@ -93,6 +93,26 @@ If port 5432 is already taken (for example by a PostgreSQL installed on Windows)
 Start again locally with `seed --batch ... --reset`. Never re-seed Cloud SQL once Datastream runs: the command
 refuses `--reset` unless `PG_HOST` is a local name.
 
+### Tenant access (D3, D6)
+
+`seed` leaves `g2.store_access` empty. After seeding, add the POC D test rows once (re-running adds nothing):
+
+```bash
+.venv/Scripts/python -m simulator store-access-seed --dry-run      # print the rows
+.venv/Scripts/python -m simulator store-access-seed                # tenant A/B users and apps, plus 2 proof rows
+.venv/Scripts/python -m simulator revoke --principal <email> --account ACC00001   # AT-25: access removal
+.venv/Scripts/python -m simulator grant  --principal <email> --account ACC00001   # and back
+```
+
+| Principal | Account | Proves |
+| --- | --- | --- |
+| `sa-tenant-a-user`, `sa-app-tenant-a` | `ACC00001` | Tenant A |
+| `sa-tenant-b-user`, `sa-app-tenant-b` | `ACC00005` | Tenant B |
+| `sa-tenant-a-user` | `ACC00002` (child of `ACC00001`) | Folds into tenant A; no new tenant |
+| `sa-tenant-b-user` | `ACC00031` (vendor) | Dropped: a vendor is never a tenant |
+
+Emails are `<name>@gks-datalake-poc2-dev.iam.gserviceaccount.com` (`--project` changes it).
+
 ## Settings (environment variables)
 
 | Variable | Default | Meaning |
@@ -144,6 +164,7 @@ simulator/
   batches.py            batch 1-3
   state.py              the state snapshot in expected/
   crm_export.py         CRM export generator (B2) ✅
+  store_access.py       grant, revoke, store-access-seed (D3, D6)
   expected/             batch_1.json .. batch_3.json
   vendor/               POC 1's generator, unchanged (see vendor/README.md)
   tests/                pytest (includes test_crm_export.py)

@@ -1,0 +1,9 @@
+# tenant_reader settings (D7). The app runs as sa-test-app, which may only impersonate the two app identities below.
+project: gks-datalake-poc2-dev
+environment: dev
+maximum_bytes_billed: 1000000000   # 1 GB per query; a runaway query fails instead of billing
+tenants:
+  A: sa-app-tenant-a@gks-datalake-poc2-dev.iam.gserviceaccount.com   # mapped to ACC00001 in store_access
+  B: sa-app-tenant-b@gks-datalake-poc2-dev.iam.gserviceaccount.com   # mapped to ACC00005
+# Negative case: impersonating the writer must be refused (AT-24 application part, AT-27).
+writer: sa-dwh-writer-dev@gks-datalake-poc2-dev.iam.gserviceaccount.com

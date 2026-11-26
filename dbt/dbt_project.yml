@@ -20,7 +20,7 @@ vars:
   incremental_lookback_minutes: 30
   golden_step: baseline           # which golden_store_health checkpoint the golden test compares
   pii_deny_columns: ["email", "phone", "first_name", "last_name", "user_name", "contact_name"]
-  pii_value_scan_allow: ["map_tenant_access.principal"]   # DQ41 value scan: columns that hold emails by design
+  pii_value_scan_allow: []   # DQ41 value scan: columns that may hold emails by design (none: map_tenant_access stores hashes, spike 1)
   quarantine_error_pct: 5         # C7: above this share of quarantined incidents the run fails
 
 models:
