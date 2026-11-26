@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "CaseEvent",
+  "namespace": "poc.lpos",
+  "fields": [
+    { "name": "event_id", "type": "string" },
+    { "name": "case_id", "type": "string" },
+    { "name": "event_type", "type": "string" },
+    {
+      "name": "event_ts",
+      "type": { "type": "long", "logicalType": "timestamp-micros" }
+    },
+    { "name": "g2_store_id", "type": "string" },
+    { "name": "offender_token", "type": ["null", "string"], "default": null },
+    { "name": "case_status", "type": "string" },
+    { "name": "loss_amount", "type": ["null", "double"], "default": null },
+    { "name": "items_count", "type": ["null", "int"], "default": null }
+  ]
+}
