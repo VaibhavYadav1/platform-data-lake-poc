@@ -1,0 +1,30 @@
+# local: your own user (OAuth), datasets dbt_<you>_*
+# ci:    datasets dbt_pr_<n>_*
+# dev/int: the Cloud Run job's service account
+poc_dwh:
+  target: local
+  outputs:
+    local:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT', 'gks-datalake-poc2-dev') }}"
+      dataset: "dbt_{{ env_var('DBT_USER', 'dev') }}"
+      location: us-central1
+      threads: 4
+    ci:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT', 'gks-datalake-poc2-dev') }}"
+      dataset: "dbt_pr_{{ env_var('PR_NUMBER', '0') }}"
+      location: us-central1
+      threads: 4
+    dev: &sa
+      type: bigquery
+      method: oauth            # Cloud Run job service account (application default credentials)
+      project: "{{ env_var('GCP_PROJECT', 'gks-datalake-poc2-dev') }}"
+      dataset: stg_dev
+      location: us-central1
+      threads: 8
+    int:
+      <<: *sa
+      dataset: stg_int

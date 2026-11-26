@@ -1,0 +1,37 @@
+version: 2
+models:
+  - name: int_account__tenant
+    description: Account to top-level account (tenant), with the number of steps up.
+    columns:
+      - name: account_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "Top-level account id"
+        data_tests: [not_null]
+      - name: hierarchy_depth
+        description: "Steps from the account to the tenant; 0 means top-level"
+  - name: int_store__tenant
+    description: Tenant and customer flag per G2 store, with the reason when there is no tenant (DQ37, DQ45, DQ46).
+    columns:
+      - name: store_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: crm_store_id
+        description: "The store's one Active CRM record"
+      - name: account_id
+        description: "Account on that record"
+      - name: tenant_id
+        description: "Top-level account; null unless tenant_reason is ASSIGNED"
+      - name: hierarchy_depth
+        description: "Steps up to the tenant"
+      - name: is_customer_store
+        description: "Tenant account is an active customer"
+        data_tests: [not_null]
+      - name: tenant_reason
+        description: ASSIGNED, NO_CRM_RECORD, MULTIPLE_ACTIVE_RECORDS, UNKNOWN_ACCOUNT or BROKEN_HIERARCHY
+        data_tests:
+          - not_null
+          - accepted_values: {values: [ASSIGNED, NO_CRM_RECORD, MULTIPLE_ACTIVE_RECORDS, UNKNOWN_ACCOUNT, BROKEN_HIERARCHY]}
+      - name: _source_updated_at
+        description: "Newest change among the store and its CRM rows"

@@ -1,0 +1,49 @@
+version: 2
+models:
+  - name: fct_wheel_event
+    description: One row per wheel event, deduplicated on event_id, with the wheel's store and tenant. Incremental merge on event_id.
+    columns:
+      - name: event_id
+        description: "Event key and merge key"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "From the wheel's store; null for an unknown wheel"
+        data_type: "string"
+      - name: store_id
+        description: "From dim_wheel; null for an unknown wheel (DQ43)"
+        data_type: "string"
+      - name: wheel_id
+        description: "The wheel"
+        data_type: "string"
+        data_tests: [not_null]
+      - name: event_type
+        description: LOCK, UNLOCK, EXIT_ATTEMPT or LOW_BATTERY
+        data_type: string
+        data_tests:
+          - accepted_values: {values: [LOCK, UNLOCK, EXIT_ATTEMPT, LOW_BATTERY]}
+      - name: event_ts
+        description: "When the wheel sent it"
+        data_type: "timestamp"
+        data_tests: [not_null]
+      - name: event_date
+        description: "DATE of event_ts; partition column"
+        data_type: "date"
+      - name: _dq_status
+        description: "PASS or WARN"
+        data_type: "string"
+      - name: _dq_reasons
+        description: "Checks that flagged the row (DQ43)"
+        data_type: "array<string>"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lake load time of the event"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

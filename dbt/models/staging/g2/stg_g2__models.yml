@@ -1,0 +1,53 @@
+version: 2
+# One row per key from the change log; is_deleted / deleted_at / _source_updated_at are added by cdc_current_state.
+models:
+  - name: stg_g2__brands
+    description: Current brands
+    columns: [{name: brand_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2__teams
+    description: Current teams
+    columns: [{name: team_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2__statuses
+    description: Current statuses. status_name must be unique among live rows because incidents refer to it by text.
+    columns:
+      - name: status_id
+        description: "Key"
+        data_tests: [unique, not_null]
+  - name: stg_g2__alert_types
+    description: Current alert types
+    columns: [{name: alert_type_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2__stores
+    description: Current stores
+    columns: [{name: store_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2__device_locations
+    description: Current device locations
+    columns: [{name: device_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2__users
+    description: Current users. Contains personal data; never published, only tokenised.
+    columns: [{name: user_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2__alert_incidents
+    description: Current alert incidents including soft deletes
+    columns: [{name: incident_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2__alert_history
+    description: Current alert history rows including soft deletes
+    columns:
+      - name: history_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: incident_id
+        description: "Parent incident"
+        data_tests: [not_null]
+  - name: stg_g2__store_access
+    description: Current store access grants (principal may see CRM account). principal is a plain email by decision 3.
+    columns:
+      - name: principal
+        description: "Login email"
+        data_tests: [not_null]
+      - name: crm_account_id
+        description: "CRM account"
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [principal, crm_account_id]}
+  - name: stg_g2__heartbeat
+    description: Current heartbeat row per source
+    columns: [{name: source, description: Key, data_tests: [unique, not_null]}]

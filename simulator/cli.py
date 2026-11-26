@@ -2,10 +2,10 @@
 
 import argparse
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .batches import BatchError, run_batch
 from .config import Settings
 from .crm_export import CRMExportError, CRMState, generate_export, upload_to_gcs, write_export_folder
 from .db import connect
@@ -22,16 +22,16 @@ def expected_path(n):
 def parse_args(argv):
     parser = argparse.ArgumentParser(prog="python -m simulator", description="poc-source-simulator, scripted mode")
     sub = parser.add_subparsers(dest="command", required=True)
-    
+
     s = sub.add_parser("seed", help="load the frozen POC 1 batch and the probe rows into an empty G2")
     s.add_argument("--batch", required=True, help="the batch folder from docs/poc2/baseline.md")
     s.add_argument("--reset", action="store_true", help="local database only: empty the 11 tables first")
-    
+
     b = sub.add_parser("batch", help="apply one scripted change batch, then compare with expected/batch_<n>.json")
     b.add_argument("--n", type=int, required=True, choices=[1, 2, 3])
     b.add_argument("--write-expected", action="store_true",
                    help="write expected/batch_<n>.json from the result instead of comparing with it")
-    
+
     c = sub.add_parser("crm-export", help="generate CRM export snapshots (task B2)")
     c.add_argument("--bucket", help="GCS bucket name (without gs://)")
     c.add_argument("--prefix", default="crm", help="folder prefix in bucket (default: crm)")
@@ -42,13 +42,22 @@ def parse_args(argv):
     c.add_argument("--plant-issues", action="store_true", help="plant DQ issues for testing")
     c.add_argument("--seed", type=int, default=42, help="random seed for reproducibility")
     c.add_argument("--start-time", help="first export timestamp (YYYYMMDDTHHMMSSZ), default: now")
-    
+
+    for name, verb in (("grant", "add"), ("revoke", "remove")):
+        a = sub.add_parser(name, help=f"{verb} one g2.store_access row: this principal may see this CRM account (D3, D6)")
+        a.add_argument("--principal", required=True, help="email, as SESSION_USER() returns it")
+        a.add_argument("--account", required=True, help="CRM account id, e.g. ACC00001")
+
+    sa = sub.add_parser("store-access-seed", help="grant the POC D test rows once, after seed (D3)")
+    sa.add_argument("--project", default=DEFAULT_PROJECT, help="project in the service account emails")
+    sa.add_argument("--dry-run", action="store_true", help="print the rows, change nothing")
+
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
-    
+
     # CRM export command (B2)
     if args.command == "crm-export":
         try:
@@ -57,24 +66,24 @@ def main(argv=None):
                 start_time = datetime.strptime(args.start_time, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
             else:
                 start_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-            
+
             # Validate arguments
             if not args.bucket and not args.local_dir:
                 print("error: either --bucket or --local-dir is required")
                 return 1
-            
+
             print(f"Generating {args.count} CRM export(s) starting at {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
             if args.big_change:
                 print("⚠️  Big change mode: >50% change rate (for AT-21 testing)")
-            
+
             # Initialize CRM state
             state = CRMState.initialize(n_accounts=50, n_stores=100, seed=args.seed)
-            
+
             # Generate exports
             for i in range(args.count):
                 export_time = start_time + timedelta(hours=i)
                 print(f"\nExport {i + 1}/{args.count}: {export_time.strftime('%Y%m%dT%H%M%SZ')}")
-                
+
                 # Generate CSV content
                 csv_files = generate_export(
                     state=state,
@@ -83,7 +92,7 @@ def main(argv=None):
                     big_change=args.big_change and i == args.count - 1,  # Apply big change to last export
                     plant_issues=args.plant_issues,
                 )
-                
+
                 # Write to destination
                 if args.local_dir:
                     folder = write_export_folder(args.local_dir, export_time, csv_files)
@@ -91,15 +100,15 @@ def main(argv=None):
                 else:
                     path = upload_to_gcs(args.bucket, args.prefix, export_time, csv_files)
                     print(f"  ✓ Uploaded to {path}")
-                
+
                 # Print stats
                 for name, content in csv_files.items():
                     rows = content.count('\n') - 1  # Subtract header
                     print(f"    {name}: {rows} rows")
-            
+
             print(f"\n✅ Generated {args.count} export(s) successfully")
             return 0
-            
+
         except CRMExportError as e:
             print(f"error: {e}")
             return 1
@@ -108,12 +117,27 @@ def main(argv=None):
             import traceback
             traceback.print_exc()
             return 1
-    
-    # G2 database commands (seed, batch)
+
+    if args.command == "tick":
+        return run_tick_command(args)
+
+    if args.command == "store-access-seed" and args.dry_run:  # prints the rows, needs no database
+        return run_store_access(None, args.command, project=args.project, dry_run=True)
+
+    # G2 database commands (seed, batch, grant, revoke, store-access-seed)
+    from .batches import BatchError, run_batch
+    from .seed import SeedError, seed
+    from .state import snapshot
+
     settings = Settings.from_env()
     print(f"G2: {settings.describe()}")
     try:
         with connect(settings) as conn:
+            if args.command in ("grant", "revoke", "store-access-seed"):
+                return run_store_access(conn, args.command, principal=getattr(args, "principal", None),
+                                        account=getattr(args, "account", None),
+                                        project=getattr(args, "project", DEFAULT_PROJECT),
+                                        dry_run=getattr(args, "dry_run", False))
             if args.command == "seed":
                 seed(conn, args.batch, reset=args.reset, local=settings.is_local)
                 return 0
@@ -140,4 +164,26 @@ def main(argv=None):
                 print(f"  {key}: expected {json.dumps(expected[key])}\n  {key}: actual   {json.dumps(result[key])}")
         return 1
     print(f"matches {path.name}")
+    return 0
+
+
+def run_tick_command(args, env=None):
+    """`tick`: settings from the environment, as the Cloud Run job sets them (guide 10.6)."""
+    from .tick import TickError, run_tick
+
+    env = os.environ if env is None else env
+    rate = args.rate if args.rate is not None else float(env.get("RATE", "1.0"))
+    settings = Settings.from_env(env)
+    print(f"G2: {settings.describe()}")
+    try:
+        with connect(settings) as conn:
+            result = run_tick(conn, rate=rate, case_topic=env.get("CASE_TOPIC") or None,
+                              g2dl_project=env.get("G2DL_PROJECT") or None, crm_bucket=env.get("CRM_BUCKET") or None,
+                              crm_prefix=env.get("CRM_PREFIX", "crm"))
+    except TickError as e:
+        print(f"error: {e}")
+        return 1
+    print(result.summary())
+    print(json.dumps({"opened": result.opened, "updated": result.updated, "closed": result.closed,
+                      "deleted": result.deleted, "moved_device": result.moved_device, "planted": result.planted}))
     return 0

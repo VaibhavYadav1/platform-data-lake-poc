@@ -1,0 +1,60 @@
+name: poc_dwh
+version: "0.2.0"
+config-version: 2
+profile: poc_dwh
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  g2_raw_dataset: raw_g2          # override for parity runs: raw_g2_parity
+  crm_raw_dataset: raw_crm
+  lpos_raw_dataset: raw_lpos
+  g2dl_dataset: sim_g2_datalake
+  # g2dl_project: defaults to the target project in sources.yml; set it only if the lake is in another project
+  future_tolerance_minutes: 5     # DQ34
+  incremental_lookback_minutes: 30
+  golden_step: baseline           # which golden_store_health checkpoint the golden test compares
+  pii_deny_columns: ["email", "phone", "first_name", "last_name", "user_name", "contact_name"]
+  pii_value_scan_allow: []   # DQ41 value scan: columns that may hold emails by design (none: map_tenant_access stores hashes, spike 1)
+  quarantine_error_pct: 5         # C7: above this share of quarantined incidents the run fails
+
+models:
+  poc_dwh:
+    +labels: {poc: phase2, managed_by: dbt}
+    staging:
+      +schema: stg
+      +materialized: view
+    intermediate:
+      +schema: prep
+      +materialized: table
+    marts:
+      +schema: build
+      +materialized: table
+      +contract: {enforced: true}
+      +on_schema_change: fail      # incremental facts: a column change must be noticed, not absorbed
+    rollups:
+      +schema: build
+      +materialized: table
+      +contract: {enforced: true}
+    security:
+      +schema: build          # published to sec_{env} by publish.py
+      +materialized: table
+      +contract: {enforced: true}
+
+# Results history (C7 review step): every test's outcome is appended to ops_{env}.dq_result after each run.
+on-run-end:
+  - "{{ log_dq_results(results) }}"
+
+seeds:
+  poc_dwh:
+    +schema: prep
+    +labels: {poc: phase2, managed_by: dbt}
+
+tests:
+  +store_failures: true
+  +schema: dq

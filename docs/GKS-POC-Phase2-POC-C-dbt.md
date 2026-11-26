@@ -263,7 +263,7 @@ key column(s) from the model's `.yml`.
 | **Dev**     | The main environment. Runs as the Cloud Run job's service account | `stg_dev`, `prep_dev`, `build_dev`, `dq_dev`; published to `wh_dev`, `sec_dev`        |
 | **Int**     | Second environment from the same code. Runs less often         | `stg_int`, `prep_int`, `build_int`, `dq_int`; published to `wh_int`, `sec_int`        |
 
-Local and CI use `DBT_USER` and `PR_NUMBER` (from `profiles.yml`). All use project `data-lake-poc-512405` unless
+Local and CI use `DBT_USER` and `PR_NUMBER` (from `profiles.yml`). All use project `gks-datalake-poc2-dev` unless
 `GCP_PROJECT` is set. If `DBT_USER` is not set, local uses `dev`, giving `dbt_dev_build`. That is not `build_dev`.
 
 **How `generate_schema_name.sql` helps.** dbt normally glues the profile dataset and the folder schema together. This

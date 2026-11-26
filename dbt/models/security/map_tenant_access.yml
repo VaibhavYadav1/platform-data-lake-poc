@@ -1,0 +1,21 @@
+version: 2
+models:
+  - name: map_tenant_access
+    description: >
+      One row per (principal, tenant). Published to sec_{env}; tenant readers can read it (spike 1), so it holds
+      a hash of the email, never the email.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [principal_hash, tenant_id]}
+    columns:
+      - name: principal_hash
+        description: "to_hex(sha256(lower(email))); the tenant row policy compares it with SESSION_USER() hashed the same way"
+        data_type: "string"
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_match_regex: {regex: "^[0-9a-f]{64}$"}
+      - name: tenant_id
+        description: Tenant the principal may read; always a customer account
+        data_type: string
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_account'), field: account_id}

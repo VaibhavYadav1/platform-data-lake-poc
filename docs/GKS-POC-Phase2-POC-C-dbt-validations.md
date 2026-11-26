@@ -2,11 +2,11 @@
 
 |                  |                                                                                                                                  |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**       | Draft for review. Nothing here is built yet: the `dbt/` folder in `platform-data-lake-poc` holds only READMEs                     |
+| **Status**       | Draft for review. The first implementation is on branch `poc_c_dbt` (commit `61b8012`). Section 9 reviews it against this document |
 | **Owner**        | Shreyash (POC C validations)                                                                                                     |
 | **Covers**       | Tasks C1 (conventions), C7 (validation rules), C9 (DQ41), C12 (freshness); checks DQ33–DQ43; the POC 1 rules that still apply      |
 | **Sources**      | [GKS-POC-Phase2-detailed-plan.md](GKS-POC-Phase2-detailed-plan.md) sections 0.4, 4.3, 8, 12, 13 and Appendix A; [GKS-POC-Phase2-POC-C-dbt.md](GKS-POC-Phase2-POC-C-dbt.md); POC 1 [validation-rules.md](../../data-lake-ETL-tool/docs/validation-rules.md), [engine.py](../../data-lake-ETL-tool/app/validation/engine.py) and `app/validation/rules/` |
-| **Last updated** | 2026-11-20                                                                                                                       |
+| **Last updated** | 2026-11-23                                                                                                                       |
 
 Anything marked **Proposed** is my suggestion and needs agreement from the POC C owner. Anything marked **Plan** is
 already decided in the plan.
@@ -183,6 +183,17 @@ Composite keys use `dbt_utils.unique_combination_of_columns`.
 | DQ42 | More than half the CRM accounts change at once    | —     | CRM loader (POC B, B5), not dbt                     | Error: export held                    | —                                               |
 | DQ43 | Wheel event names an unknown wheel                | ④     | `relationships` test with `severity: warn`          | Warning: kept, flagged                | `fct_wheel_event.yml`                           |
 
+**Added in the implementation (not yet in plan section 13):**
+
+| DQ   | Rule                                                                 | Layer | Severity and action       | File on `poc_c_dbt`                              |
+| ---- | -------------------------------------------------------------------- | ----- | ------------------------- | ------------------------------------------------ |
+| DQ44 | Case event names a store that isn't in G2                             | ②/④   | Warning: kept, flagged    | `stg_lpos__case_event.sql`, `fct_case.sql`, `tests/dq44_unknown_case_store.sql` |
+| DQ45 | Account hierarchy broken (missing parent, loop, deeper than 10)      | ③     | Warning: tenant null      | `int_account__tenant.sql`, `tests/dq45_broken_account_hierarchy.sql` |
+| DQ46 | CRM store points at an unknown account, or a G2 store has more than one Active CRM record | ③ | Warning: tenant null | `int_store__tenant.sql`, `tests/dq46_broken_store_link.sql` |
+| DQ47 | Work order with an unknown account, store or device, or an account that differs from its store's | ④ | Warning: kept, flagged | `fct_work_order.sql`, `tests/dq47_work_order_links.sql` |
+
+These four need adding to plan section 13.
+
 ### 4.3 POC 1 rules: what carries over (C7)
 
 **What I checked:**
@@ -234,11 +245,11 @@ Composite keys use `dbt_utils.unique_combination_of_columns`.
 | **`dim_device`**          | store required and exists                                                             | Port: `relationships` to `dim_store`                     | error                   |
 |                           | `type` one of five device types                                                       | Port: `accepted_values`                                  | error                   |
 |                           | `location_class` from the main-door flag                                              | By construction                                          | —                       |
-| **`dim_status` → seed `status`** | seven names, unique; `is_closed` only for Resolved; `next_step_action` except Not Started | Port: tests on the seed                          | error                   |
+| **`dim_status` → model `status`** (built from `stg_g2__statuses`, not a seed) | seven names, unique; `is_closed` only for Resolved; `next_step_action` except Not Started | Port: tests on the `status` model | error                   |
 | **`fct_alert_incident` → `fct_alert`** | required columns                                                 | Port: `not_null`                                         | error                   |
 |                           | store and device exist                                                                | **DQ33** (quarantine)                                    | critical                |
 |                           | alert type exists                                                                     | Port: add `DQ33_UNKNOWN_ALERT_TYPE` to the row rule      | critical                |
-|                           | status one of the seven (`BAD_ENUM`)                                                  | Port: `relationships` to seed `status`                   | error                   |
+|                           | status one of the seven (`BAD_ENUM`)                                                  | Port: `relationships` to model `status`                  | error                   |
 |                           | `priority` P1–P5                                                                      | Port: `accepted_values`                                  | error                   |
 |                           | `alert_id` = `ALR-<device>-<alert type>`                                              | Port: `expression_is_true`                               | warn                    |
 |                           | device installed at the store (DQ08)                                                  | Port: warn test. **Not** quarantine: the simulator moves devices between stores (plan 4.3) | warn |
@@ -762,7 +773,75 @@ DQ39 already writes there.
 
 ---
 
-## 9. Issues to settle
+## 9. Implementation review (`poc_c_dbt`, commit `61b8012`)
+
+Scope: the validation part only (row rules, quarantine, tests, freshness). Reviewed by reading the code against this
+document and the plan. dbt has not been run, because there is no BigQuery data yet.
+
+### 9.1 Implemented as designed
+
+| Area                     | Where on `poc_c_dbt`                                                                            |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| Quarantine pattern       | `int_alert__validated` sets `_dq_status` (`PASS`, `WARN`, `QUARANTINE`) and `_dq_reasons`; `quarantine_alert` in `dq_{env}`; `fct_alert` excludes `QUARANTINE`; `tests/quarantine_not_in_fct_alert.sql` |
+| DQ33, DQ38               | Row rules in `int_alert__validated`                                                             |
+| Unknown status           | Warning `UNKNOWN_STATUS` in `int_alert__validated`, plus a warn `relationships` test to `status` (POC 1 `BAD_ENUM`, now a warning) |
+| DQ35, DQ36, DQ37, DQ43   | Model logic plus a warn singular test each                                                      |
+| DQ44–DQ47                | New checks (section 4.2), each with a warn test                                                 |
+| DQ41, column names       | `tests/dq41_no_personal_data_columns.sql` (error)                                               |
+| Tokens                   | `tokenize()` in `stg_crm__account`, `fct_alert`, `fct_alert_history`                            |
+| AT-19, B8/C8             | `tests/at19_*.sql`; `scripts/ci/check_single_definition.py`                                     |
+| C1                       | `scripts/ci/check_dbt_conventions.py`: key tests and column descriptions in `build` models       |
+| Settings                 | Contracts on `build`; `on_schema_change: fail`; `store_failures` into `dq_{env}`; key tests on every staging model |
+| Tenant reasons           | `int_store__tenant.tenant_reason`: `ASSIGNED`, `NO_CRM_RECORD`, `MULTIPLE_ACTIVE_RECORDS`, `UNKNOWN_ACCOUNT`, `BROKEN_HIERARCHY` |
+
+### 9.2 Bugs
+
+| # | Problem | Effect | Fix |
+| - | ------- | ------ | --- |
+| 1 | `fct_alert` is incremental and merges only rows that aren't quarantined. An incident that was valid and later becomes quarantined (a bad correction, or its store or device is deleted) keeps its old row | `quarantine_not_in_fct_alert` (error) fails, and so does the `store_id` → `dim_store` test when a store is deleted. **Publishing stops on every micro-batch until a full refresh** | A `post_hook` on `fct_alert` that deletes incidents now in quarantine, or let quarantined keys into the merge and remove them |
+| 2 | Freshness is set for the whole `raw_g2` source, so all 11 tables get it | Tables that rarely change (`g2_brands`, `g2_teams`, `g2_statuses`, `g2_alert_types`) fail the 30-minute limit almost always | Freshness only on `g2_alert_incidents`, `g2_alert_history`, `g2_heartbeat` |
+| 3 | DQ40: `account_landing` warns at 75 minutes and errors at 180 | The plan says error at 75 minutes | `error_after: 75 minutes` |
+| 4 | DQ34 compares with `current_timestamp()` and checks only `created_at` | Each model in a run may use a different "now"; a future `resolved_at` passes (POC 1 DQ12 checked both) | Use the existing `snapshot_ts()` macro; check `resolved_at` too |
+
+### 9.3 Missing validations
+
+| # | Missing | Why it matters |
+| - | ------- | -------------- |
+| 1 | Tests for DQ33, DQ34, DQ38 (`tests/dq33_*.sql` and so on), warn level, reading `quarantine_alert` | A quarantined row shows nothing in the run output and leaves no per-check record in `dq_{env}` (section 5.6) |
+| 2 | Unknown alert type | Not quarantined, and `fct_alert.alert_type_id` → `dim_alert_type` is error-level: one bad alert type stops publishing for every tenant (issue 4) |
+| 3 | Allowed values from POC 1 | `fct_alert.priority_name` (P1–P5); `dim_device.device_type`; `dim_alert_type` `severity`, `category_name`, `system_type`, `default_priority`; the seven status names and `is_closed` only for Resolved; country format |
+| 4 | POC 1 consistency rules, as warnings | DQ08, device type matches the alert type, DQ13, DQ25, DQ27, DQ28, DQ29, `alert_id` format (section 4.3) |
+| 5 | History of quarantined incidents | `fct_alert_history` keeps them with null store and tenant (`relationships` is warn). Hidden from tenants, visible internally. Needs a decision (issue 5) and a count test |
+| 6 | DQ41 value scan | Not written. `fct_alert_history.comments` is free text; `map_tenant_access.principal` holds emails by design and needs an allow-list |
+| 7 | AT-18 unit test | The older-change guard in `incremental_filter` has no unit test (section 5.8) |
+| 8 | Results history | No `on-run-end` hook into `ops_{env}.dq_result` (issue 8) |
+| 9 | Golden scenarios | `seeds/golden_store_health.csv` is empty, so the golden test passes without checking anything |
+| 10 | Source key tests | No `not_null` tests on source keys (minor) |
+
+### 9.4 Fixes made (local on `poc_c_dbt`, not committed)
+
+Grouped by the stage where each one is fixed. `dbt parse` passes; nothing has been run against BigQuery yet.
+
+| Stage | Issue (9.2 / 9.3) | Fix | File |
+| ----- | ----------------- | --- | ---- |
+| ① Source | Bug 2: freshness on every `raw_g2` table | Freshness only on `g2_alert_incidents`, `g2_alert_history`, `g2_heartbeat` | `models/sources/sources.yml` |
+| ① Source | Bug 3: DQ40 errors at 180 minutes | Warn at 65, error at 75 minutes | `models/sources/sources.yml` |
+| ① Source | Missing 10: source key tests | `not_null` on every source key | `models/sources/sources.yml` |
+| ③ Intermediate | Bug 4: DQ34 used `current_timestamp()`, `created_at` only | `snapshot_ts()`; checks `created_at` and `resolved_at` | `int_alert__validated.sql` |
+| ③ Intermediate | Missing 2: unknown alert type | Critical reason `UNKNOWN_ALERT_TYPE` (quarantine) | `int_alert__validated.sql` |
+| ③ Intermediate | Missing 4: POC 1 consistency rules | Warning reasons `DQ08`, `DEVICE_TYPE_MISMATCH`, `DQ13`, `DQ25`, `DQ29`, `BAD_ALERT_ID` on the incident; DQ27 and DQ28 as warn singular tests on the history | `int_alert__validated.sql`; `tests/dq27_*.sql`, `tests/dq28_*.sql` |
+| ③ Intermediate | Missing 5: history of quarantined incidents | **Proposed decision applied (issue 5):** kept out of `fct_alert_history`, stored in `dq_{env}.quarantine_alert_history`; error test that none reach the fact | `quarantine_alert_history.sql`, `fct_alert_history.sql`, `tests/quarantine_history_not_in_fct_alert_history.sql` |
+| ④ Marts | Bug 1: incremental `fct_alert` keeps a row that later becomes quarantined | `post_hook` deletes quarantined incidents after each run (same on `fct_alert_history`) | `fct_alert.sql`, `fct_alert_history.sql` |
+| ⑤ `.yml` tests | Missing 3: POC 1 allowed values | `accepted_values`: priority (fact and alert type), device type (device and alert type), severity, category, system type, the seven status names; `is_closed` only for Resolved and next step except Not Started (`expression_is_true`); country `^[A-Z]{2}$` (warn) | `fct_alert.yml`, `dim_device.yml`, `dim_alert_type.yml`, `status.yml`, `dim_store.yml` |
+| ⑥ Tests | Missing 1: no record per quarantine check | Generic test `dq_reason_absent`, one warn test per reason (DQ33, UNKNOWN_ALERT_TYPE, DQ34, DQ38 and every warning); error test when more than `quarantine_error_pct` (5%) is quarantined | `tests/generic/dq_reason_absent.sql`, `int_alert.yml`, `tests/quarantine_rate_below_limit.sql` |
+| ⑥ Tests | Missing 6: DQ41 value scan | Error test over every text column in `build` for email-like values; allow-list `map_tenant_access.principal`; tag `dq41_value_scan` so the micro-batch can skip it and the daily load runs it | `tests/dq41_no_email_values.sql`, `dbt_project.yml` |
+| ⑥ Tests | Missing 7: AT-18 | dbt unit test on `fct_alert`: an older change for a stored key is skipped, new and newer rows pass | `fct_alert.yml` (`unit_tests`) |
+| ⑥ Tests | Missing 9: empty golden seed | Warn test while the seed has no rows for `golden_step`. **The scenarios themselves must come from the scenario owner (Dev 5)**; they can't be made up | `tests/golden_seed_has_scenarios.sql` |
+| ⑦ Review | Missing 8: results history | `on-run-end` hook appends every test result to `ops_{env}.dq_result` (creates the dataset and table if missing, so local and CI runs work too) | `macros/log_dq_results.sql`, `dbt_project.yml` |
+
+---
+
+## 10. Issues to settle
 
 1. **Implementation guide missing.** The plan points to section 8.6 of `bigquery-warehouse-implementation.md` for
    the porting method. That file is not in any local repo. Ask the plan owner for it, then align this document.
@@ -775,10 +854,10 @@ DQ39 already writes there.
    adds them. Confirm with the POC A owner, or port them as warn regex tests.
 4. **Unknown alert type.** DQ33 covers device and store only. POC 1 also rejected an unknown alert type.
    **Proposed:** add `DQ33_UNKNOWN_ALERT_TYPE` to the same rule.
-5. **History of a quarantined incident.** POC 1 rejected the incident's history too (`UNKNOWN_REFERENCE`). If
-   `fct_alert_history` keeps those events, its `relationships` test to `fct_alert` fails and stops the publish.
-   **Proposed:** `fct_alert_history` keeps only events whose incident is in `fct_alert`, and sends the rest to
-   `dq_{env}.quarantine_alert_history`.
+5. **History of a quarantined incident.** POC 1 rejected the incident's history too (`UNKNOWN_REFERENCE`). The
+   implementation keeps those events with null store and tenant, and makes the `relationships` test a warning, so
+   publishing isn't blocked. **Proposed:** `fct_alert_history` keeps only events whose incident is in `fct_alert`,
+   and sends the rest to `dq_{env}.quarantine_alert_history`. Either way, agree it with the POC C owner.
 6. **POC 1 rejections that become warnings.** POC 1 rejected DQ08, DQ25, DQ27, DQ28, DQ29 and DQ13. The plan's
    quarantine list is only DQ33, DQ34 and DQ38. I've proposed **warn** for the rest. In particular, devices now
    move between stores, so DQ08 must not quarantine. Agree this with the POC C owner.
@@ -788,5 +867,7 @@ DQ39 already writes there.
    `ops_{env}.dq_result` (step 6).
 9. **POC 1 report-only checks** (DQ16, DQ20, DQ22–DQ24, DQ26, DQ30–DQ32) are not defined in our repos. Decide with
    the POC C owner whether any are needed.
-10. **Column names** in the code above are placeholders from the POC 1 stage models. Update them when the staging
-    models are written.
+10. **Column names** in sections 5.1–5.8 are illustrations from the POC 1 stage models. The implementation keeps
+    the source names (`created_at`, `resolved_at`, `current_status`) in the intermediate models and renames them in
+    the facts (`alert_time`, `resolved_time`, `status_name`). The code on `poc_c_dbt` is the reference.
+11. **New checks DQ44–DQ47** (section 4.2) need adding to plan section 13, with an owner and a planted defect each.

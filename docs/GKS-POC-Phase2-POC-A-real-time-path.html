@@ -294,7 +294,7 @@ pre.tree .new{color:var(--green)}
     <div><dt>Project</dt><dd>Store Alert Data Lake, Phase 2</dd></div>
     <div><dt>POC</dt><dd>A: real-time path (change data capture and streaming)</dd></div>
     <div><dt>Based on</dt><dd>Approved plan v2.0 (17 Nov 2026), schema round 2 (18 Nov 2026)</dd></div>
-    <div><dt>Guide date</dt><dd>19 Nov 2026 · build progress updated 24 Nov 2026 (<a href="#s17-progress">17.0</a>)</dd></div>
+    <div><dt>Guide date</dt><dd>19 Nov 2026 · build progress updated 24 Nov 2026 (A4, A5 rehearsal) (<a href="#s17-progress">17.0</a>)</dd></div>
     <div><dt>Environment</dt><dd><code>gks-datalake-poc2-dev</code>, <code>us-central1</code></dd></div>
     <div><dt>Technologies</dt><dd>Cloud SQL PostgreSQL 16, Datastream, Pub/Sub, BigQuery, Cloud Run jobs, Cloud Scheduler, dbt, Terraform, Python</dd></div>
   </dl>
@@ -1151,6 +1151,14 @@ resource "google_bigquery_dataset_iam_member" "datastream_agent" {
       <li>Snapshot every <code>raw_g2</code> table into <code>raw_g2_parity</code> (<code>CREATE SNAPSHOT TABLE ... CLONE ...</code>). Only then may the simulator start.</li>
       <li>Make an update and a delete by hand and record what they look like. Do this on a scratch heartbeat row after the snapshot, so the parity copy stays clean. <span class="pill sug">Suggested</span></li>
     </ol>
+    <div class="note"><b>As built (24 Nov)</b>
+      <ul class="bul small">
+        <li>The datasets <code>raw_g2</code> and <code>raw_g2_parity</code> live in <code>terraform/shared/datastream.tf</code>; the module takes <code>raw_dataset_id</code> from the dataset resource, so the dataset is created first.</li>
+        <li>No <code>project_number</code> variable: <code>data "google_project"</code> looks it up. The stream <code>depends_on</code> the IAM grant.</li>
+        <li>SSL: <code>ssl_config { server_verification { ca_certificate = ... } }</code> inside <code>postgresql_profile</code>, with the Cloud SQL server CA (new <code>cloudsql_g2</code> output <code>server_ca_cert</code>). Accepted against the public IP.</li>
+        <li>The Datastream service agent had to be created first: <code>gcloud beta services identity create --service=datastream.googleapis.com</code>.</li>
+        <li>Updates arrive as one row; deletes carry only the key; <code>source_timestamp</code> is in ms; order by <code>source_timestamp</code> then the LSN in <code>sort_keys[1]</code> parsed from hex, never by <code>change_sequence_number</code> as text (<code>cdc.md</code> 4.5).</li>
+      </ul></div>
   </div>
 
   <div class="sub"><h3><span class="no">7.5</span>WAL retention</h3>
@@ -1493,7 +1501,7 @@ python -m simulator revoke|grant --principal <email> --account <id>   # store_ac
         <li>Steps, in one transaction: schema check (11 tables, expected columns), refuse if not empty, <code>COPY</code> the 9 tables (empty string to NULL; the server casts text to <code>BOOLEAN</code>/<code>TIMESTAMPTZ</code>), add <code>S999</code>, <code>D999</code> and the <code>simulator</code> heartbeat, then compare counts with the baseline plus probe rows or roll back.</li>
         <li><code>seed --reset</code> empties the tables first, and is refused unless <code>PG_HOST</code> is a local name, so Cloud SQL can't be re-seeded by accident (phase 3 pitfall).</li>
         <li><code>store_access</code> stays empty until the tenant model exists (0.7).</li>
-        <li><code>data-lake-schema==1.0.0</code> comes from the Phase 1 Artifact Registry (<code>data-lake-poc-512405</code>). The A8 image build and any CI step that installs the simulator need read access to it: a cross-project grant. <span class="pill open">Open</span></li>
+        <li><code>data-lake-schema==1.0.0</code> comes from the Phase 1 Artifact Registry (<code>data-lake-poc-512405</code>). The A8 image build and any CI step that installs the simulator need read access to it: a cross-project grant. <span class="pill open">Open</span> <b>Resolved for A8 (25 Nov):</b> <code>tick</code> doesn't use the generator, so the image installs <code>simulator/requirements-runtime.txt</code> from public PyPI and needs no grant. Still open for CI (E1), which runs the seed tests.</li>
       </ul>
     </div>
   </div>
@@ -1547,24 +1555,15 @@ python -m simulator revoke|grant --principal <email> --account <id>   # store_ac
         write_crm_export()                              # task B2
     with engine.begin() as db:                     # last step, so it proves everything above ran
         db.execute(text("UPDATE g2.heartbeat SET beat_at = now() WHERE source = 'simulator'"))</script>
-    <script type="text/plain" class="code" data-lang="python" data-tag="sug" data-title="Connecting with the Cloud SQL Python Connector">import os
-import sqlalchemy
-from google.cloud import secretmanager
-from google.cloud.sql.connector import Connector
-
-def make_engine() -> sqlalchemy.engine.Engine:
-    instance = os.environ["PG_INSTANCE"]            # gks-datalake-poc2-dev:us-central1:poc-ops-db
-    project = instance.split(":")[0]
-    password = secretmanager.SecretManagerServiceClient().access_secret_version(
-        name=f"projects/{project}/secrets/{os.environ['PG_SECRET']}/versions/latest"
-    ).payload.data.decode()
-    connector = Connector()
-    return sqlalchemy.create_engine(
-        "postgresql+pg8000://",
-        creator=lambda: connector.connect(
-            instance, "pg8000", user="simulator_user", password=password, db=os.environ["PG_DB"]
-        ),
-    )</script>
+    <div class="note dec"><b>As built (A8, 25 Nov 2026): <code>simulator/tick.py</code></b>
+      <ul class="bul">
+        <li><b>Connection: no Python connector.</b> This guide first suggested the Cloud SQL Python Connector with SQLAlchemy and <code>pg8000</code>, reading the password from Secret Manager in code. Instead the Cloud Run job mounts Cloud SQL's Unix socket (<code>/cloudsql/&lt;connection name&gt;</code>) and injects the password from <code>poc-ops-db-simulator</code> as <code>PG_PASSWORD</code>. The simulator connects with the same <code>psycopg</code> code it uses locally (<code>PG_HOST</code>, <code>PG_USER=simulator_user</code>), so there is no second driver and no secret-reading code. The connector doesn't support <code>psycopg</code> anyway.</li>
+        <li><b>No Phase 1 package in the image.</b> <code>tick</code> imports neither the vendored generator nor <code>seed</code>/<code>batches</code> (which need <code>data-lake-schema</code>); status actions are read from <code>g2.statuses</code>. <code>cli.py</code> imports <code>seed</code>, <code>batches</code> and <code>state</code> only for those commands. A test checks this.</li>
+        <li><b>Sources switched by environment:</b> case events run only when <code>CASE_TOPIC</code> is set (fails the tick if the A7 publisher isn't in the image), CRM only when <code>CRM_BUCKET</code> is set and the minute is under 5, wheel events only with <code>G2DL_PROJECT</code> (refused until A9 exists). Empty = off.</li>
+        <li>Each changed incident is touched once per tick (open, update or close); updates follow POC 1's lifecycle (Not Started → In Review → Case Opened/monitored → Case Updated, Re-Opened → Case Opened); deletes remove a resolved incident and its history. S999/D999 and planted future incidents are never changed.</li>
+        <li>G2 changes are one transaction; the heartbeat is a second one, after everything else. A failed later step leaves the heartbeat stale.</li>
+      </ul>
+    </div>
   </div>
 
   <div class="sub"><h3><span class="no">10.6</span>Running in the cloud (A8)</h3>
@@ -1574,39 +1573,37 @@ def make_engine() -> sqlalchemy.engine.Engine:
       <li>The image is pushed to Artifact Registry. The plan says the data-gen repo's Cloud Build builds it; that repository is now read-only, so build it from <code>simulator/</code> in this repository (by hand until CD, E2, takes over on Day 6). <span class="pill sch">Changed</span></li>
       <li><b>Pause switch:</b> pause the scheduler job. <b>Rate:</b> a Terraform variable passed as <code>RATE</code>.</li>
     </ul>
-    <script type="text/plain" class="code" data-lang="hcl" data-tag="sug" data-title="terraform/modules/run_jobs (simulator part, starting point)">resource "google_cloud_run_v2_job" "simulator" {
-  project             = var.project_id
-  name                = "poc-source-simulator"
-  location            = var.region
-  deletion_protection = false
-  labels              = { poc = "phase2", owner = "dev3", managed_by = "terraform" }
-
+    <div class="note dec"><b>As built (A8, 25 Nov 2026): <code>terraform/shared/simulator.tf</code></b>
+      <ul class="bul">
+        <li><b>In <code>shared</code>, not <code>modules/run_jobs</code>.</b> There is one simulator for the whole sandbox, like the stream; <code>env</code> is applied once per environment and would create it twice. <code>sa-simulator</code> is created here too (the <code>service_accounts</code> module, D2, doesn't exist yet).</li>
+        <li><b>Connection:</b> a <code>cloud_sql_instance</code> volume mounted at <code>/cloudsql</code>, <code>PG_HOST=/cloudsql/&lt;connection name&gt;</code>, <code>PG_USER=simulator_user</code>, and <code>PG_PASSWORD</code> from the secret (<code>value_source.secret_key_ref</code>) instead of <code>PG_INSTANCE</code>/<code>PG_SECRET</code> (10.5).</li>
+        <li><b>Optional sources are variables, empty by default:</b> <code>simulator_case_topic</code> (A6/A7), <code>simulator_crm_bucket</code> (B2). The guide's starting point hard-coded <code>CASE_TOPIC</code>, which would have failed every tick until A7. <code>G2DL_PROJECT</code> is added with A9.</li>
+        <li>The scheduler job is created <b>paused</b>, with no retries and a 60-second attempt deadline; its OAuth token has the <code>cloud-platform</code> scope.</li>
+        <li><b>Night-off fix:</b> <code>modules/workflows</code> paused and resumed a scheduler job called <code>poc-simulator</code>, which doesn't exist. <code>night_off.tf</code> now passes <code>poc-simulator-tick</code>, and the module default is corrected.</li>
+      </ul>
+    </div>
+    <script type="text/plain" class="code" data-lang="hcl" data-tag="sch" data-title="terraform/shared/simulator.tf (as built, excerpt)">resource "google_cloud_run_v2_job" "simulator" {
+  name     = "poc-source-simulator"
+  location = var.region
   template {
     task_count = 1
     template {
-      service_account = var.sa_simulator_email
-      timeout         = "240s"                 # finish well inside the 5-minute interval
-      max_retries     = 0                      # the next tick is the retry
+      service_account = google_service_account.simulator.email   # sa-simulator
+      timeout         = "240s"   # finish well inside the 5-minute interval
+      max_retries     = 0        # the next tick is the retry
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance { instances = [module.cloudsql_g2.connection_name] }
+      }
       containers {
-        image = var.simulator_image            # built from simulator/ in this repo
-        resources {
-          limits = { cpu = "1", memory = "512Mi" }
-        }
-        dynamic "env" {
-          for_each = {
-            MODE         = "tick"
-            RATE         = tostring(var.simulator_rate)
-            PG_INSTANCE  = "${var.project_id}:${var.region}:poc-ops-db"
-            PG_DB        = "g2"
-            PG_SECRET    = "poc-ops-db-simulator"
-            CASE_TOPIC   = "projects/${var.project_id}/topics/poc-case-events"
-            CRM_BUCKET   = var.crm_bucket
-            G2DL_PROJECT = var.g2dl_project
-          }
-          content {
-            name  = env.key
-            value = env.value
-          }
+        image = var.simulator_image   # built from simulator/ in this repo
+        args  = ["tick"]
+        volume_mounts { name = "cloudsql", mount_path = "/cloudsql" }
+        # env: MODE=tick, RATE, PG_HOST=/cloudsql/<connection name>, PG_DB=g2, PG_USER=simulator_user,
+        #      CASE_TOPIC (empty until A7), CRM_BUCKET (empty until B2)
+        env {
+          name = "PG_PASSWORD"
+          value_source { secret_key_ref { secret = module.cloudsql_g2.secret_ids["simulator"], version = "latest" } }
         }
       }
     }
@@ -1614,31 +1611,27 @@ def make_engine() -> sqlalchemy.engine.Engine:
 }
 
 resource "google_cloud_scheduler_job" "simulator_tick" {
-  project   = var.project_id
-  region    = var.region
-  name      = "poc-simulator-tick"
-  schedule  = "*/5 * * * *"
-  time_zone = "Etc/UTC"
-
+  name     = "poc-simulator-tick"
+  schedule = "*/5 * * * *"
+  paused   = true
   http_target {
     http_method = "POST"
     uri         = "https://run.googleapis.com/v2/projects/${var.project_id}/locations/${var.region}/jobs/poc-source-simulator:run"
     oauth_token {
-      service_account_email = var.sa_orchestrator_email
+      service_account_email = var.orchestrator_service_account_email
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
     }
   }
-
-  # The pause switch and night-off (E8) pause this job outside Terraform
-  lifecycle {
-    ignore_changes = [paused]
-  }
+  lifecycle { ignore_changes = [paused] }   # pause switch, night-off and AT-15 work outside Terraform
 }</script>
     <div class="tscroll"><table>
       <thead><tr><th>Identity</th><th>Needs</th><th>Source</th></tr></thead>
       <tbody>
-        <tr><td><code>sa-simulator</code></td><td>Cloud SQL client; publisher on <code>poc-case-events</code>; object creator on the CRM bucket; editor on <code>sim_g2_datalake</code></td><td><span class="pill plan">Plan</span></td></tr>
-        <tr><td><code>sa-simulator</code></td><td>Secret accessor on <code>poc-ops-db-simulator</code>; BigQuery job user in the project that runs the wheel-event load job</td><td><span class="pill sug">Suggested</span></td></tr>
-        <tr><td><code>sa-orchestrator</code></td><td>Invoker on the Cloud Run jobs (to call <code>:run</code>)</td><td><span class="pill plan">Plan</span></td></tr>
+        <tr><td><code>sa-simulator</code></td><td>Cloud SQL client (project); secret accessor on <code>poc-ops-db-simulator</code></td><td><span class="pill sch">Built · A8</span></td></tr>
+        <tr><td><code>sa-simulator</code></td><td>Publisher on <code>poc-case-events</code></td><td><span class="pill plan">With A6/A7</span></td></tr>
+        <tr><td><code>sa-simulator</code></td><td>Object creator on the CRM landing bucket</td><td><span class="pill plan">With B2's bucket</span></td></tr>
+        <tr><td><code>sa-simulator</code></td><td>Editor on <code>sim_g2_datalake</code>; BigQuery job user where the wheel-event load job runs</td><td><span class="pill plan">With A9</span></td></tr>
+        <tr><td><code>sa-orchestrator</code></td><td><code>roles/run.invoker</code> on <code>poc-source-simulator</code> (to call <code>:run</code>)</td><td><span class="pill sch">Built · A8</span></td></tr>
       </tbody>
     </table></div>
   </div>
@@ -1646,7 +1639,7 @@ resource "google_cloud_scheduler_job" "simulator_tick" {
   <div class="sub"><h3><span class="no">10.7</span>Completion criteria</h3>
     <ul class="bul">
       <li><b>A3:</b> row counts equal the batch's accepted rows in <code>baseline.md</code>, plus the probe rows.</li>
-      <li><b>A8:</b> the job runs every 5 minutes for 2 hours with no failures, and every source changes.</li>
+      <li><b>A8:</b> the job runs every 5 minutes for 2 hours with no failures, and every source changes. Step-by-step with checks: <code>docs/poc2/A8_STEPS.md</code>.</li>
     </ul>
   </div>
 </section>
@@ -2190,6 +2183,9 @@ sources:
     <div class="tscroll"><table>
       <thead><tr><th>Date</th><th>Task</th><th>What was done</th><th>Where</th><th>Differences and follow-ups</th></tr></thead>
       <tbody>
+        <tr><td class="nw">25 Nov</td><td class="nw">A8</td><td><b>Deployed (3c9fb48), schedule still paused.</b> Image <code>poc-source-simulator:b2ec315</code>; targeted apply: 6 added (<code>sa-simulator</code>, its Cloud SQL client and secret grants, job <code>poc-source-simulator</code>, invoker for <code>sa-orchestrator</code>, scheduler <code>poc-simulator-tick</code> PAUSED), 2 changed (night-off/morning-on now name <code>poc-simulator-tick</code>), 0 destroyed; <code>poc-cdc-stream</code> untouched. Next: one tick by hand, V1–V3, then the 2-hour watch. Before that, code written: <code>tick</code> command (G2 open/update/close with history, 1-in-10 delete, 1-in-50 device move, 0.5% planted DQ33/DQ34, case-event and CRM hooks switched by env, heartbeat last); Dockerfile; Terraform for <code>sa-simulator</code>, <code>poc-source-simulator</code>, <code>poc-simulator-tick</code> (paused). Tests: 8/8 tick tests pass on Postgres 16; the image builds and runs a tick locally. <code>terraform validate</code> passes. Next: build, apply, one tick by hand, 2-hour watch (<code>docs/poc2/A8_STEPS.md</code>)</td><td><code>simulator/tick.py</code>, <code>simulator/cli.py</code>, <code>simulator/Dockerfile</code>, <code>simulator/requirements-runtime.txt</code>, <code>terraform/shared/simulator.tf</code>, <code>terraform/shared/night_off.tf</code></td><td>Design fixes (10.5, 10.6, phase 8): socket connection instead of the Python connector; runtime requirements from PyPI (no Phase 1 grant); Dockerfile copied into the wrong folder; night-off named a non-existent scheduler job (<code>poc-simulator</code>); <code>CASE_TOPIC</code> hard-coded before A7 exists. A8 isn't done until A6 and A7 add case events. Two B2 tests (<code>test_crm_export.py</code>) fail on Windows on <code>main</code> too, unrelated</td></tr>
+        <tr><td class="nw">24 Nov</td><td class="nw">A5</td><td><code>scripts/acceptance/at15_cdc_initial.py</code> written (070540c): pauses <code>poc-simulator-tick</code> if it exists, waits for a fresh heartbeat in <code>raw_g2</code>, compares 11 counts, writes JSON evidence. <code>--raw</code> rehearsal (current state computed from <code>raw_g2</code>) passes 11/11; a deliberate mismatch exits 1. <b>AT-15 not passed yet</b>: it needs the A10 views</td><td><code>scripts/acceptance/</code>, <code>docs/poc2/evidence/</code>, <code>scripts/requirements.txt</code></td><td>Review fixes: <code>store_access</code> key is <code>principal, crm_account_id</code> (not <code>store_id, user_id</code>); evidence time is local time labelled Z; a missing staging view crashes instead of failing. A10 found part-built outside the repo: 9 <code>stg_g2__*</code> views in <code>dbt_dev_stg</code> (counts equal Cloud SQL), no heartbeat/store_access views, ordering on <code>change_sequence_number</code> as text (section 21). Status docs: <code>docs/poc2/G2_CHANGE_PATH_STATUS.md</code>, <code>COMPLETE_POC_A_STATUS.md</code></td></tr>
+        <tr><td class="nw">24 Nov</td><td class="nw">A4</td><td>Datastream applied (6 added: <code>raw_g2</code>, <code>raw_g2_parity</code>, 2 connection profiles, IAM on <code>raw_g2</code>, <code>poc-cdc-stream</code>; 9 minutes to create). Backfill of all 11 objects completed in about 75 s: 2,160 rows, equal to A3, no duplicates. <code>raw_g2_parity</code>: 10 snapshot tables, 2,160 rows. Update/delete shapes recorded on a <code>cdc-test</code> heartbeat row; replication delay ≤ about 6 s (5 samples). Slot <code>poc_slot</code> active, WAL held fell from 1.7 MB to a few kB</td><td><code>terraform/modules/datastream_pg</code>, <code>terraform/shared/datastream.tf</code> (2a8f321), <code>docs/poc2/cdc.md</code></td><td>See the 7.4 "As built" note. The first snapshots were empty (rows still in the write buffer); retaken, and <code>g2_heartbeat</code> cloned as of 08:47 UTC to leave out the <code>cdc-test</code> rows, which were written before the snapshot. <code>g2_store_access</code> doesn't exist until its first row. <code>change_sequence_number</code> does <b>not</b> sort as text (cdc.md 4.5). A first <code>cdc.md</code> by another session (6adbd56) had two invented latency samples and dropped the A2 section; corrected</td></tr>
         <tr><td class="nw">24 Nov</td><td class="nw">A3</td><td><code>simulator seed --batch clean_data_20261116_190645</code> run once on <code>poc-ops-db</code> as <code>simulator_user</code> through the Auth Proxy (port 5433). All 9 rebuilt files matched the baseline MD5s. Counts checked independently as <code>postgres</code>: brands 4, teams 5, statuses 7, users 18, alert_types 11, stores 41, device_locations 133, alert_incidents 450, alert_history 1490, store_access 0, heartbeat 1 (2,160 = baseline 2,157 + <code>S999</code>, <code>D999</code>, heartbeat <code>simulator</code>). Slot <code>poc_slot</code> still inactive, 960 kB WAL held (215 kB after A2)</td><td><code>simulator/seed.py</code>, <code>docs/poc2/cdc.md</code></td><td>Ran through the proxy with <code>PG_HOST</code>/<code>PG_PORT</code>, not <code>PG_INSTANCE</code>/<code>PG_SECRET</code>: the connector path comes with A8 (runbook updated). Through the proxy the host is <code>127.0.0.1</code>, so <code>seed --reset</code> thought Cloud SQL was local; it now also refuses when the server has the <code>cloudsqlsuperuser</code> role. <code>store_access</code> empty until 0.7 (section 21). In Git Bash, <code>psql</code> with a heredoc prints nothing (&ldquo;stdin is not a tty&rdquo;, the <code>winpty</code> wrapper): use <code>psql.exe</code> or <code>-f file.sql</code>. <b>Data frozen until the A4 parity snapshot</b></td></tr>
         <tr><td class="nw">23 Nov</td><td class="nw">A2</td><td>Bootstrap run on <code>poc-ops-db</code> through the Auth Proxy. Checks passed: <code>wal_level = logical</code>, 11 tables, 11 tables in <code>poc_pub</code>, slot <code>poc_slot</code> (<code>pgoutput</code>, logical, inactive, 215 kB WAL held), <code>datastream_user</code> with REPLICATION and SELECT, <code>simulator_user</code> with SELECT/INSERT/UPDATE/DELETE and no REPLICATION. Rehearsed first on PostgreSQL 16 in Docker (<code>-c wal_level=logical</code>, port 5435): first run OK, second refused, <code>--check</code> OK</td><td><code>sql/g2/replication.sql</code>, <code>scripts/g2_bootstrap.py</code> (PRs #4, #5), <code>docs/poc2/cdc.md</code></td><td><code>postgres</code> needed REPLICATION to create the slot: the script ran <code>ALTER ROLE postgres WITH REPLICATION</code> and retried. The slot is created by the script, not <code>replication.sql</code> (7.3). First Cloud SQL run failed before connecting (WinError 193: Python found the bash <code>gcloud</code> launcher); fixed to use <code>gcloud.cmd</code> (PR #5). <b>The slot now holds WAL: do A3 and A4 soon, or stop the instance</b></td></tr>
         <tr><td class="nw">23 Nov</td><td class="nw">A1</td><td><code>poc-ops-db</code> applied from <code>main</code> (12 added). Verified: <code>RUNNABLE</code>, PostgreSQL 16.15, <code>us-central1-c</code>, <code>db-f1-micro</code> Enterprise, <code>cloudsql.logical_decoding=on</code>, <code>ENCRYPTED_ONLY</code>, 5 Datastream networks, backups off, database <code>g2</code> (empty), user <code>postgres</code>, 3 secrets at version 1. Through the Auth Proxy: <code>wal_level = logical</code>, <code>ssl = on</code></td><td><code>terraform/modules/cloudsql_g2/</code>, <code>terraform/shared/cloudsql_g2.tf</code> (PR #3)</td><td>Pinned <code>google ~&gt; 8.12</code> and <code>random ~&gt; 3.6</code> in <code>shared</code>; lock file has Windows and Linux checksums. The PR plan was run locally: both Cloud Build triggers are disabled since 23 Nov. Auth Proxy installed with <code>gcloud components install cloud-sql-proxy</code>. Billing has started (about $8–10 a month while running)</td></tr>
@@ -2381,7 +2377,8 @@ SELECT source, beat_at FROM g2.heartbeat;</script></div></li>
         <li><input type="checkbox" id="rb-p4-3"><div class="sb"><label for="rb-p4-3">Watch the backfill</label>
           <script type="text/plain" class="code" data-lang="bash" data-tag="sug">gcloud datastream streams describe poc-cdc-stream --location=us-central1 --format="value(state)"
 gcloud datastream objects list --stream=poc-cdc-stream --location=us-central1 \
-  --format="table(displayName, backfillJob.state, backfillJob.lastEndTime)"</script>
+  --format="table(display_name, backfill_job_state, last_backfill_job_end_time)"
+# Git Bash: run gcloud datastream objects and bq queries with backticks from PowerShell (the .cmd wrappers break)</script>
           <p class="small">Wait for <code>RUNNING</code> and every object's backfill <code>COMPLETED</code>.</p></div></li>
         <li><input type="checkbox" id="rb-p4-4"><div class="sb"><label for="rb-p4-4">Check the copy is complete</label>
           <p class="small">Before any change, each <code>raw_g2.g2_&lt;table&gt;</code> holds one row per source row. Its <code>COUNT(*)</code> equals the phase 3 count.</p></div></li>
@@ -2398,7 +2395,7 @@ done</script></div></li>
   bq query --use_legacy_sql=false --location=us-central1 --format=csv \
     "SELECT '$t' AS t, (SELECT COUNT(*) FROM raw_g2.g2_$t) AS raw, (SELECT COUNT(*) FROM raw_g2_parity.g2_$t) AS parity"
 done</script>
-          <p class="small">If a pair differs, recently written rows weren't in the snapshot yet: drop that snapshot and take it again.</p></div></li>
+          <p class="small">If a pair differs, recently written rows weren't in the snapshot yet: drop that snapshot and take it again. Right after the backfill every snapshot can come out <b>empty</b> (24 Nov): wait until <code>bq show</code> reports <code>numRows</code> and no <code>streamingBuffer</code> before cloning. If anything changed a table after the backfill, clone it <code>FOR SYSTEM_TIME AS OF</code> a time before the change.</p></div></li>
         <li><input type="checkbox" id="rb-p4-7"><div class="sb"><label for="rb-p4-7">Announce "parity snapshot taken"</label>
           <p class="small">Tell Dev 1 (C4 may run) and Dev 3 (the simulator may start changing data).</p></div></li>
         <li><input type="checkbox" id="rb-p4-8"><div class="sb"><label for="rb-p4-8">Inspect the metadata</label>
@@ -2564,20 +2561,25 @@ HAVING copies > 1;      -- about 2% of events, 2 copies each, 2 message ids</scr
         <li><input type="checkbox" id="rb-p8-1"><div class="sb"><label for="rb-p8-1">Confirm the parity snapshot exists</label>
           <p class="small">Phase 4 step 7 announced it. If not, stop here.</p></div></li>
         <li><input type="checkbox" id="rb-p8-2"><div class="sb"><label for="rb-p8-2">Finish tick mode (Dev 3)</label>
-          <p class="small">The tick in 10.5: incidents, history, deletes, device moves, case events, wheel events (once A9 exists), the CRM hook for B2, planted defects, and the heartbeat as the last step. Read <code>MODE</code> and <code>RATE</code> from the environment.</p></div></li>
+          <p class="small">The tick in 10.5: incidents, history, deletes, device moves, case events, wheel events (once A9 exists), the CRM hook for B2, planted defects, and the heartbeat as the last step. Read <code>MODE</code> and <code>RATE</code> from the environment.</p>
+          <p class="small"><b>As built (25 Nov):</b> <code>simulator/tick.py</code>, command <code>python -m simulator tick [--rate R]</code>, tests <code>simulator/tests/test_tick.py</code> (8 pass against Postgres 16). Run them with <code>SIM_TEST_PG="host=localhost port=5432 user=postgres password=local" python -m pytest simulator/tests/test_tick.py</code>.</p></div></li>
         <li><input type="checkbox" id="rb-p8-3"><div class="sb"><label for="rb-p8-3">Add the Dockerfile and build the image</label>
-          <script type="text/plain" class="code" data-lang="dockerfile" data-tag="sug" data-title="simulator/Dockerfile">FROM python:3.12-slim
+          <p class="small"><b>Changed (25 Nov):</b> the first draft copied the build context (<code>simulator/</code>) straight into <code>/app</code>, so the image had no <code>simulator</code> package and <code>python -m simulator</code> failed. It also installed <code>requirements.txt</code>, which needs the Phase 1 registry. The built version copies into <code>/app/simulator/</code>, installs <code>requirements-runtime.txt</code> from PyPI and runs as a non-root user. <code>simulator/.gcloudignore</code> leaves the tests out of the upload.</p>
+          <script type="text/plain" class="code" data-lang="dockerfile" data-tag="sch" data-title="simulator/Dockerfile (as built)">FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+COPY requirements-runtime.txt .
+RUN pip install -r requirements-runtime.txt
+COPY . /app/simulator/
+RUN useradd --uid 10001 --no-create-home sim
+USER sim
 ENTRYPOINT ["python", "-m", "simulator"]
 CMD ["tick"]</script>
-          <script type="text/plain" class="code" data-lang="bash" data-tag="sug"># Artifact Registry repository created in Terraform (Dev 4); <repo> is its name
-IMAGE=us-central1-docker.pkg.dev/gks-datalake-poc2-dev/<repo>/poc-source-simulator:$(git rev-parse --short HEAD)
-gcloud builds submit simulator/ --tag "$IMAGE"     # by hand until CD (E2) builds it on merge</script></div></li>
+          <script type="text/plain" class="code" data-lang="bash" data-tag="sch"># Artifact Registry repository "poc" (terraform/shared/cloudbuild_main.tf)
+IMAGE=us-central1-docker.pkg.dev/gks-datalake-poc2-dev/poc/poc-source-simulator:$(git rev-parse --short HEAD)
+gcloud builds submit simulator/ --tag "$IMAGE" --project=gks-datalake-poc2-dev   # by hand until CD (E2)</script></div></li>
         <li><input type="checkbox" id="rb-p8-4"><div class="sb"><label for="rb-p8-4">Apply the job, the scheduler and the grants (Dev 4)</label>
-          <p class="small">From 10.6. Create the scheduler job <b>paused</b> (<code>paused = true</code>); <code>ignore_changes = [paused]</code> then leaves it alone. Grants: <code>sa-simulator</code> as in 10.6; <code>sa-orchestrator</code> invoker on the job.</p></div></li>
+          <p class="small">From 10.6, in <code>terraform/shared/simulator.tf</code>. Set <code>simulator_image</code> in <code>terraform/shared/terraform.tfvars</code>, then <code>terraform plan -out=a8.tfplan</code>. Expect 6 to add (<code>sa-simulator</code>, 2 grants for it, the job, the invoker grant, the scheduler job) and 2 to change (the <code>poc-night-off</code> and <code>poc-morning-on</code> scheduler jobs' request body now names <code>poc-simulator-tick</code>); nothing destroyed. The scheduler job is created <b>paused</b>; <code>ignore_changes = [paused]</code> then leaves it alone.</p></div></li>
         <li><input type="checkbox" id="rb-p8-5"><div class="sb"><label for="rb-p8-5">Run one tick by hand</label>
           <script type="text/plain" class="code" data-lang="bash" data-tag="sug">gcloud run jobs execute poc-source-simulator --region=us-central1 --wait
 gcloud run jobs executions list --job=poc-source-simulator --region=us-central1 --limit=3</script></div></li>
@@ -2604,7 +2606,7 @@ WHERE publish_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 10 MINUTE);</sc
       </ol>
       <div class="expect"><b>Done when</b><span>The job runs every 5 minutes for 2 hours with no failures, and every source changes. This is part of Gate G6.</span></div>
       <div class="note warn pitfalls"><b>Pitfalls</b>
-        <ul class="bul small"><li>A tick that runs past 5 minutes overlaps the next one. Keep the 240-second timeout and keep ticks small.</li><li><code>db-f1-micro</code> allows few connections; open one engine per tick and close it.</li><li>If the heartbeat isn't the last step, it can report "alive" after a failed tick.</li><li>The plan says the image comes from the data-gen repo's Cloud Build. That repo is read-only now; build from this repo.</li></ul></div>
+        <ul class="bul small"><li>A tick that runs past 5 minutes overlaps the next one. Keep the 240-second timeout and keep ticks small.</li><li><code>db-f1-micro</code> allows few connections; open one engine per tick and close it.</li><li>If the heartbeat isn't the last step, it can report "alive" after a failed tick.</li><li>The plan says the image comes from the data-gen repo's Cloud Build. That repo is read-only now; build from this repo.</li><li>Night routine: pause <code>poc-simulator-tick</code> before <code>poc-ops-db</code> stops, or every tick fails all night. Night-off does it now that it names the right job (it used <code>poc-simulator</code> until 25 Nov).</li><li>Don't set <code>simulator_case_topic</code> before the A7 publisher is in the image: every tick would fail and the heartbeat would stop.</li></ul></div>
     </div>
   </article>
 
@@ -2932,15 +2934,21 @@ gcloud pubsub subscriptions pull poc-case-events-dlq-sub --limit=5</script>
       <tr><td><code>int</code> environment</td><td>The repository README gives <code>int</code> its own project, <code>gks-datalake-poc2-int</code>. D-22 has <code>dev</code> and <code>int</code> share one project and the landing datasets. Who reads <code>raw_g2</code> from <code>int</code>, and with which grants?</td><td><span class="pill open">Open</span></td><td>E9, A4, A6, A9 IAM</td></tr>
       <tr><td>Probe ids</td><td><code>S999</code>/<code>D999</code> replace <code>S-PROBE</code>. Update the plan's A3 and AT-16 text</td><td><span class="pill sch">Changed · decision 1</span></td><td>A3, AT-16</td></tr>
       <tr><td>Simulator image build</td><td>The plan's A8 builds the image in the data-gen repo's Cloud Build. That repository is read-only; build from <code>simulator/</code> here</td><td><span class="pill sch">Changed</span></td><td>A8, E2</td></tr>
-      <tr><td>Artifact Registry</td><td>The repository name, and turning on <code>artifactregistry.googleapis.com</code> (not in the 0.2 API list). The API is on (checked 20 Nov); the repository name is still open</td><td><span class="pill open">Open</span></td><td>0.2, A8</td></tr>
-      <tr><td><code>data-lake-schema</code> source</td><td>The vendored generator needs <code>data-lake-schema==1.0.0</code>, published only in the Phase 1 registry (<code>data-lake-poc-512405</code>). The simulator image build (A8) and CI need a cross-project reader grant, or the package must be mirrored into POC 2's registry</td><td><span class="pill open">Open</span></td><td>A8, E1</td></tr>
+      <tr><td>Artifact Registry</td><td>The repository name, and turning on <code>artifactregistry.googleapis.com</code> (not in the 0.2 API list). The API is on (checked 20 Nov); the repository name is still open</td><td><span class="pill plan">Resolved · 25 Nov</span> repository <code>poc</code> (us-central1), in <code>terraform/shared/cloudbuild_main.tf</code>; the simulator image is <code>poc/poc-source-simulator</code></td><td>0.2, A8</td></tr>
+      <tr><td><code>data-lake-schema</code> source</td><td>The vendored generator needs <code>data-lake-schema==1.0.0</code>, published only in the Phase 1 registry (<code>data-lake-poc-512405</code>). The simulator image build (A8) and CI need a cross-project reader grant, or the package must be mirrored into POC 2's registry</td><td><span class="pill plan">Resolved for A8 · 25 Nov</span> the image installs <code>requirements-runtime.txt</code> from PyPI; <code>tick</code> doesn't load the generator. <span class="pill open">Open</span> for CI (E1)</td><td>A8, E1</td></tr>
+      <tr><td>Simulator connection to Cloud SQL</td><td>10.5 suggested the Cloud SQL Python Connector (SQLAlchemy, <code>pg8000</code>, password read in code). Built with Cloud Run's Cloud SQL socket and the password injected as an env var; same <code>psycopg</code> code as locally</td><td><span class="pill sch">Changed · 25 Nov</span></td><td>A8</td></tr>
+      <tr><td>Datastream profile replaced on every plan</td><td>The API returns <code>serverVerification</code> as <code>{}</code> (no CA certificate), so the provider dropped it from state and every <code>terraform plan</code> in <code>shared</code> after A4 replaced <code>poc-ops-db-pg</code> and <code>poc-cdc-stream</code> (a new backfill into <code>raw_g2</code>). Found in the A8 plan, not applied. Fixed with <code>ignore_changes = [postgresql_profile[0].ssl_config]</code> in <code>modules/datastream_pg</code>; a CA rotation needs a deliberate <code>-replace</code> with the stream paused</td><td><span class="pill sch">Changed · 25 Nov</span></td><td>A4, A8, A13</td></tr>
+      <tr><td><code>shared</code> state ahead of <code>main</code></td><td>Lineage API, <code>dbt_docs</code> bucket (E10) and monitoring changes (E7) were applied from branch <code>poc-e-orchestration</code>, not merged. A full plan from <code>main</code> destroys or replaces them. A8 was applied with <code>-target</code>. Merge that branch (keep <code>simulator.tf</code> and the night-off job name from <code>main</code>) before the next full apply in <code>shared</code></td><td><span class="pill open">Open · Dev 4</span></td><td>A8, E7, E10</td></tr>
+      <tr><td>Night-off simulator job name</td><td><code>modules/workflows</code> paused/resumed <code>poc-simulator</code>; the job is <code>poc-simulator-tick</code> (5.3, AT-15). Fixed in <code>night_off.tf</code> and the module default</td><td><span class="pill sch">Changed · 25 Nov</span></td><td>A8, E8</td></tr>
       <tr><td>Baseline reload</td><td>Plan 0.3 step 3 (empty <code>poc_dwh_dev</code> and reload one batch) was skipped: all 9 tables already held only <code>clean_data_20261116_190645</code> (see <code>baseline.md</code>)</td><td><span class="pill sch">Changed · 20 Nov</span></td><td>0.3, A3, C4</td></tr>
       <tr><td>Batch 1 history rows</td><td>"Acknowledged" read as the <code>ASSIGNED</code> step, with a history row per status change: batch 1 writes 50 history rows, not the plan's 40</td><td><span class="pill ver">Review · Dev 2</span></td><td>0.6, AT-17</td></tr>
-      <tr><td>Datastream metadata</td><td>Real field names, <code>change_type</code> values, whether updates come as pairs, whether <code>change_sequence_number</code> sorts as text</td><td><span class="pill ver">Verify · A4</span></td><td>A10</td></tr>
-      <tr><td>Datastream SSL</td><td>Whether the connection profile needs an explicit SSL setting with the provider version in use</td><td><span class="pill ver">Verify · A4</span></td><td>A4</td></tr>
+      <tr><td>Datastream metadata</td><td>Real field names, <code>change_type</code> values, whether updates come as pairs, whether <code>change_sequence_number</code> sorts as text</td><td><span class="pill plan">Resolved · 24 Nov</span> updates are one row; deletes carry the key only; <code>source_timestamp</code> in ms; <code>change_sequence_number</code> does <b>not</b> sort as text: order by the LSN parsed from <code>sort_keys</code> (<code>cdc.md</code> 3–4)</td><td>A10</td></tr>
+      <tr><td>Datastream SSL</td><td>Whether the connection profile needs an explicit SSL setting with the provider version in use</td><td><span class="pill plan">Resolved · 24 Nov</span> <code>server_verification</code> with the Cloud SQL server CA works against the public IP</td><td>A4</td></tr>
       <tr><td>Slot creation rights</td><td>Whether <code>postgres</code> needs <code>REPLICATION</code> before creating the slot in Cloud SQL</td><td><span class="pill plan">Resolved · 23 Nov</span> yes: the bootstrap ran <code>ALTER ROLE postgres WITH REPLICATION</code> (<code>cdc.md</code>)</td><td>A2</td></tr>
-      <tr><td>Seed in the WAL</td><td>The slot exists before the seed, so Datastream may deliver the seeded rows twice (backfill and change events). Staging keeps one row per key; record what arrives</td><td><span class="pill ver">Verify · A4</span></td><td>A4, A10</td></tr>
+      <tr><td>Seed in the WAL</td><td>The slot exists before the seed, so Datastream may deliver the seeded rows twice (backfill and change events). Staging keeps one row per key; record what arrives</td><td><span class="pill plan">Resolved · 24 Nov</span> not duplicated: exactly one backfill row per source row</td><td>A4, A10</td></tr>
       <tr><td>Empty <code>store_access</code></td><td>Cloud SQL was seeded with 0 <code>store_access</code> rows because the tenant model in <code>specs.md</code> isn't written. Add them later with <code>simulator grant</code> (they reach <code>raw_g2</code> as CDC inserts, not backfill)</td><td><span class="pill open">Open · 0.7</span></td><td>A3, D3</td></tr>
+      <tr><td>Staging change order</td><td>The first A10 views (in <code>dbt_dev_stg</code>, not yet in the repo) order changes by <code>change_sequence_number</code> as text, which breaks when an LSN hex part gains a digit</td><td><span class="pill open">Open · A10</span> order by <code>source_timestamp</code>, then the LSN from <code>sort_keys[1]</code> (<code>cdc.md</code> 4.5)</td><td>A10, A11</td></tr>
+      <tr><td>Missing <code>g2_store_access</code></td><td>Datastream creates no table for an empty source table, so <code>raw_g2.g2_store_access</code> doesn't exist until the first <code>simulator grant</code>. A10's source and A5's count must cope</td><td><span class="pill open">Open · A10, 0.7</span></td><td>A5, A10, D3</td></tr>
       <tr><td>Admin secret</td><td>A third secret, <code>poc-ops-db-postgres</code>, for the bootstrap user</td><td><span class="pill plan">Decided · 23 Nov</span> created in A1</td><td>A1, A2</td></tr>
       <tr><td>CI plan and secret reads</td><td>Once the triggers are back on, the PR plan (as <code>sa-cloudbuild</code>, read-only) refreshes <code>google_secret_manager_secret_version</code>, which reads the secret value. Expect a permission error; decide the grant with Dev 4 instead of widening the role blindly</td><td><span class="pill ver">Verify · E1</span></td><td>A1, E1</td></tr>
       <tr><td>Alert email</td><td><code>alert_email</code> is empty, so every <code>shared</code> plan warns and the alert policies notify nobody</td><td><span class="pill open">Open · Dev 4</span></td><td>E7</td></tr>

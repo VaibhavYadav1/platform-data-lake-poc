@@ -256,6 +256,28 @@ def test_tenant_tables_without_policy_sql_fail_closed():
         go(FakeRunner(), tables=(DIM,), policies=[])
 
 
+def test_wh_table_with_tenant_id_must_be_tenant_scoped():
+    unflagged = p.Table("dim_store", "dim", "wh", None, False)  # dim_store has tenant_id
+    r = FakeRunner()
+    with pytest.raises(p.PublishError, match="dim_store: has a tenant_id column but is not tenant_scoped"):
+        go(r, tables=(unflagged,))
+    assert not any("TRANSACTION" in s or s.startswith("CREATE") for s in r.sqls)  # nothing ran
+
+
+def test_sec_table_with_tenant_id_needs_no_flag():
+    go(FakeRunner(), tables=(SEC,), policies=[])  # map_tenant_access lives in sec, not read by readers
+
+
+def test_policy_files_in_repo_load_and_render():
+    policies = p.load_policies(Path(__file__).resolve().parents[1] / "policies")
+    assert [pol.name for pol in policies] == ["rls_all_rows", "rls_tenant"]
+    tenant = p.policy_sql(CFG, policies[1], "fct_alert")
+    assert "ON `proj.wh_dev.fct_alert`" in tenant
+    assert 'GRANT TO ("user:t@x.com")' in tenant
+    assert "FROM `proj.sec_dev.map_tenant_access`" in tenant and "SESSION_USER()" in tenant
+    assert "{" not in tenant and "{" not in p.policy_sql(CFG, policies[0], "fct_alert")
+
+
 def test_empty_tenant_principals_fail():
     cfg = p.Config("proj", "dev", all_rows_principals=("a",), tenant_principals=())
     with pytest.raises(p.PublishError, match="a principal named in no policy sees zero rows"):
@@ -359,7 +381,8 @@ def test_main_exits_nonzero_on_a_publish_error(tmp_path):
 
 def test_main_needs_an_invocation_id_unless_publishing_all(tmp_path):
     cfg = write(tmp_path, "c.yaml", "project: proj\nenvironment: dev\n")
-    tables = write(tmp_path, "t.yaml", "tables:\n  - {name: dim_store, kind: dim}\n")
+    # dim_date: no tenant_id, so no tenant_scoped flag or policies are needed for this test
+    tables = write(tmp_path, "t.yaml", "tables:\n  - {name: dim_date, kind: dim}\n")
     base = ["--env", "dev", "--config", str(cfg), "--tables", str(tables), "--run-results", str(tmp_path / "none.json")]
     assert p.main(base, runner=FakeRunner()) == 1
     assert p.main(base + ["--all"], runner=FakeRunner(), ) == 0

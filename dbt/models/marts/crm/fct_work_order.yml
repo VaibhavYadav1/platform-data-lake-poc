@@ -1,0 +1,64 @@
+version: 2
+models:
+  - name: fct_work_order
+    description: One row per CRM work order, joined to the G2 store and device it is about. DQ47 flags broken links without dropping rows.
+    columns:
+      - name: work_order_id
+        description: "Work order id"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "From the store; null means internal-only"
+        data_type: "string"
+      - name: account_id
+        description: "CRM account"
+        data_type: "string"
+      - name: crm_store_id
+        description: "CRM store record"
+        data_type: "string"
+      - name: store_id
+        description: "G2 store; null when unknown (DQ47)"
+        data_type: "string"
+      - name: device_id
+        description: "G2 device; null when none or unknown"
+        data_type: "string"
+      - name: work_type
+        description: INSTALL, REPAIR, INSPECTION or REMOVAL
+        data_type: string
+        data_tests:
+          - accepted_values: {values: [INSTALL, REPAIR, INSPECTION, REMOVAL]}
+      - name: status
+        description: OPEN, IN_PROGRESS, CLOSED or CANCELLED
+        data_type: string
+        data_tests:
+          - accepted_values: {values: [OPEN, IN_PROGRESS, CLOSED, CANCELLED]}
+      - name: opened_at
+        description: "When it was opened"
+        data_type: "timestamp"
+      - name: closed_at
+        description: "When it was closed; null while open"
+        data_type: "timestamp"
+      - name: opened_date
+        description: "DATE of opened_at; partition column"
+        data_type: "date"
+      - name: is_open
+        description: "Status is OPEN or IN_PROGRESS"
+        data_type: "bool"
+      - name: _dq_status
+        description: "PASS or WARN"
+        data_type: "string"
+      - name: _dq_reasons
+        description: "Checks that flagged the row (DQ47)"
+        data_type: "array<string>"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

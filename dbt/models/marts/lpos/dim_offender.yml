@@ -1,0 +1,37 @@
+version: 2
+models:
+  - name: dim_offender
+    description: One row per (tenant, offender token) with first and last seen and the case count. No names or images.
+    columns:
+      - name: offender_key
+        description: "Surrogate key of tenant and token"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "Tenant of the cases' stores; null means unknown stores (internal-only)"
+        data_type: "string"
+      - name: offender_token
+        description: "Opaque token from LPOS"
+        data_type: "string"
+        data_tests: [not_null]
+      - name: first_seen_at
+        description: "Earliest event with this token in the tenant"
+        data_type: "timestamp"
+      - name: last_seen_at
+        description: "Latest event"
+        data_type: "timestamp"
+      - name: case_count
+        description: "Distinct cases with this token in the tenant"
+        data_type: "int64"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"

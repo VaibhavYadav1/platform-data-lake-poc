@@ -1,0 +1,55 @@
+version: 2
+models:
+  - name: int_alert__validated
+    description: >
+      Every incident with _dq_status (PASS, WARN, QUARANTINE) and _dq_reasons. Critical: DQ33, UNKNOWN_ALERT_TYPE,
+      DQ34, DQ38. Warnings: UNKNOWN_STATUS, DQ08, DEVICE_TYPE_MISMATCH, DQ13, DQ25, DQ29, BAD_ALERT_ID.
+    columns:
+      - name: incident_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: _dq_status
+        description: PASS, WARN or QUARANTINE
+        data_tests:
+          - not_null
+          - accepted_values: {values: [PASS, WARN, QUARANTINE]}
+      - name: _dq_reasons
+        description: "Ids of every failed check. One warn test per check below counts its rows and stores them in dq_{env}."
+        data_tests:
+          # critical: the row is quarantined (C7, plan section 13)
+          - dq_reason_absent: {name: dq33_unknown_device_or_store, reason: DQ33, config: {severity: warn}}
+          - dq_reason_absent: {name: dq33_unknown_alert_type, reason: UNKNOWN_ALERT_TYPE, config: {severity: warn}}
+          - dq_reason_absent: {name: dq34_future_time, reason: DQ34, config: {severity: warn}}
+          - dq_reason_absent: {name: dq38_resolved_before_opened, reason: DQ38, config: {severity: warn}}
+          # warnings: the row is loaded and flagged (POC 1 rules)
+          - dq_reason_absent: {name: poc1_unknown_status, reason: UNKNOWN_STATUS, config: {severity: warn}}
+          - dq_reason_absent: {name: poc1_dq08_device_at_other_store, reason: DQ08, config: {severity: warn}}
+          - dq_reason_absent: {name: poc1_device_type_mismatch, reason: DEVICE_TYPE_MISMATCH, config: {severity: warn}}
+          - dq_reason_absent: {name: poc1_dq13_resolved_vs_closed_status, reason: DQ13, config: {severity: warn}}
+          - dq_reason_absent: {name: poc1_dq25_open_at_inactive_store, reason: DQ25, config: {severity: warn}}
+          - dq_reason_absent: {name: poc1_dq29_overlapping_incidents, reason: DQ29, config: {severity: warn}}
+          - dq_reason_absent: {name: poc1_bad_alert_id, reason: BAD_ALERT_ID, config: {severity: warn}}
+  - name: quarantine_alert
+    description: Incidents kept out of fct_alert, with the reasons. Nothing is dropped silently.
+    columns:
+      - name: incident_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: _dq_status
+        description: Always QUARANTINE
+        data_tests:
+          - accepted_values: {values: [QUARANTINE]}
+      - name: _dq_reasons
+        description: "DQ33, UNKNOWN_ALERT_TYPE, DQ34 and or DQ38, plus any warnings"
+  - name: quarantine_alert_history
+    description: History events of quarantined incidents, kept out of fct_alert_history together with their incident.
+    columns:
+      - name: history_id
+        description: "Key"
+        data_tests:
+          - unique
+          - not_null
+      - name: incident_id
+        description: "Quarantined incident"
+      - name: incident_dq_reasons
+        description: "Why the incident was quarantined"

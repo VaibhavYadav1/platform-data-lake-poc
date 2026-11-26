@@ -1,0 +1,19 @@
+version: 2
+models:
+  - name: stg_lpos__case_event
+    description: One row per case event, duplicates removed on event_id. Home of DQ35 and DQ44.
+    columns:
+      - name: event_id
+        description: "Unique event key"
+        data_tests: [unique, not_null]
+      - name: case_id
+        description: "Case"
+        data_tests: [not_null]
+      - name: event_type
+        description: CASE_OPENED, CASE_UPDATED or CASE_CLOSED
+        data_tests:
+          - accepted_values: {values: [CASE_OPENED, CASE_UPDATED, CASE_CLOSED]}
+      - name: copies_received
+        description: "Messages that carried this event_id"
+      - name: is_unknown_store
+        description: "g2_store_id is not in G2 (DQ44)"

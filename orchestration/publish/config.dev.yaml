@@ -8,9 +8,17 @@ all_rows_principals:
   - serviceAccount:sa-dwh-writer-dev@gks-datalake-poc2-dev.iam.gserviceaccount.com
   # - user:<internal analyst>   (add when D4 settles who may see every tenant)
 
-# Every tenant user and per-tenant application identity. Empty until D2/D4 name them; publish.py
-# stops with a clear message while it is empty and tenant-scoped tables exist.
-tenant_principals: []
+# Every tenant user and per-tenant application identity (D2 creates them in terraform/shared/security.tf).
+# Which tenant each one sees comes from sec_dev.map_tenant_access, not from here; seed it with
+# `python -m simulator store-access-seed`. A new principal here changes the policy SQL, so publish.py
+# replaces the policy on its next run (ops_dev.publish_policy_state).
+tenant_principals:
+  - serviceAccount:sa-tenant-a-user@gks-datalake-poc2-dev.iam.gserviceaccount.com
+  - serviceAccount:sa-tenant-b-user@gks-datalake-poc2-dev.iam.gserviceaccount.com
+  - serviceAccount:sa-app-tenant-a@gks-datalake-poc2-dev.iam.gserviceaccount.com
+  - serviceAccount:sa-app-tenant-b@gks-datalake-poc2-dev.iam.gserviceaccount.com
+  # - user:<Looker Studio user A>   (D10: add for the check, then remove)
+  # - user:<Looker Studio user B>
 
 # Fail when tenant-scoped tables exist but no policy SQL does. Keep true.
 require_policies: true

@@ -1,0 +1,35 @@
+version: 2
+models:
+  - name: stg_crm__account
+    description: One row per account per export, typed. Contact name and email are replaced by a token.
+    columns:
+      - name: account_id
+        description: "CRM account id"
+        data_tests: [not_null]
+      - name: export_ts
+        description: "Export the row came in"
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [account_id, export_ts]}
+  - name: stg_crm__store
+    description: One row per CRM store record per export, typed
+    columns:
+      - name: crm_store_id
+        description: "CRM store id"
+        data_tests: [not_null]
+      - name: export_ts
+        description: "Export the row came in"
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [crm_store_id, export_ts]}
+  - name: stg_crm__work_order
+    description: One row per work order per export, typed
+    columns:
+      - name: work_order_id
+        description: "Work order id"
+        data_tests: [not_null]
+      - name: export_ts
+        description: "Export the row came in"
+        data_tests: [not_null]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [work_order_id, export_ts]}

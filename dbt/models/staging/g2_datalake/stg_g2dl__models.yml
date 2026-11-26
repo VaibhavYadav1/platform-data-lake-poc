@@ -1,0 +1,14 @@
+version: 2
+models:
+  - name: stg_g2dl__wheel
+    description: Cart wheels from the lake
+    columns: [{name: wheel_id, description: Key, data_tests: [unique, not_null]}]
+  - name: stg_g2dl__wheel_event
+    description: Wheel events, one row per event_id
+    columns:
+      - name: event_id
+        description: "Key"
+        data_tests: [unique, not_null]
+      - name: wheel_id
+        description: "Wheel"
+        data_tests: [not_null]

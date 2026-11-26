@@ -1,0 +1,168 @@
+version: 2
+models:
+  - name: fct_alert
+    description: One row per alert incident, including deleted ones (soft delete). Quarantined incidents are excluded. Incremental merge on incident_id.
+    columns:
+      - name: incident_id
+        description: "Incident key and merge key"
+        data_type: "string"
+        data_tests: [unique, not_null]
+      - name: tenant_id
+        description: "Tenant from the store; null means internal-only"
+        data_type: "string"
+      - name: alert_id
+        description: "Alert stream (device and alert type)"
+        data_type: "string"
+        data_tests: [not_null]
+      - name: store_id
+        description: Store the alert was raised at
+        data_type: string
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_store'), field: store_id}
+      - name: device_id
+        description: Device that raised the alert
+        data_type: string
+        data_tests:
+          - not_null
+          - relationships: {to: ref('dim_device'), field: device_id}
+      - name: alert_type_id
+        description: Alert type
+        data_type: string
+        data_tests:
+          - relationships: {to: ref('dim_alert_type'), field: alert_type_id}
+      - name: alert_name
+        description: "Customer alert name from dim_alert_type"
+        data_type: "string"
+      - name: status_id
+        description: current_status matched to status.status_name
+        data_type: string
+        data_tests:
+          - relationships: {to: ref('status'), field: status_id, config: {severity: warn}}
+      - name: status_name
+        description: "Status label"
+        data_type: "string"
+      - name: priority_name
+        description: "P1 to P5"
+        data_type: "string"
+        data_tests:
+          - accepted_values: {values: [P1, P2, P3, P4, P5]}
+      - name: assignee_token
+        description: "Tokenised assignee; null means unassigned"
+        data_type: "string"
+      - name: assignee_team_name
+        description: "Team of the assignee (not personal data)"
+        data_type: "string"
+      - name: assigned_time
+        description: "First ASSIGNED event in the history"
+        data_type: "timestamp"
+      - name: alert_time
+        description: "When the alert fired"
+        data_type: "timestamp"
+        data_tests: [not_null]
+      - name: resolved_time
+        description: "When it stopped; null means still open"
+        data_type: "timestamp"
+      - name: alert_date
+        description: "DATE of alert_time; partition column"
+        data_type: "date"
+        data_tests: [not_null]
+      - name: brand_id
+        description: "Brand from the store"
+        data_type: "string"
+      - name: source_brand_id
+        description: "Brand as sent, for audit"
+        data_type: "string"
+      - name: brand
+        description: "Brand name from dim_store"
+        data_type: "string"
+      - name: ultimate_parent
+        description: "Company from dim_store"
+        data_type: "string"
+      - name: country
+        description: "ISO country code"
+        data_type: "string"
+      - name: level_1
+        description: "Region"
+        data_type: "string"
+      - name: level_2
+        description: "Division"
+        data_type: "string"
+      - name: level_3
+        description: "District"
+        data_type: "string"
+      - name: level_4
+        description: "Spare"
+        data_type: "string"
+      - name: level_5
+        description: "Spare"
+        data_type: "string"
+      - name: level_6
+        description: "Spare"
+        data_type: "string"
+      - name: level_7
+        description: "Spare"
+        data_type: "string"
+      - name: is_open
+        description: "By is_open_alert"
+        data_type: "bool"
+      - name: is_deleted
+        description: "Deleted in G2; the row stays"
+        data_type: "bool"
+      - name: deleted_at
+        description: "When it was deleted"
+        data_type: "timestamp"
+      - name: _dq_status
+        description: PASS or WARN
+        data_type: string
+        data_tests:
+          - accepted_values: {values: [PASS, WARN]}
+      - name: _dq_reasons
+        description: "Warnings that flagged the row"
+        data_type: "array<string>"
+      - name: _source_system
+        description: "Lineage"
+        data_type: "string"
+      - name: _source_updated_at
+        description: "Newest of the incident change and its newest history change"
+        data_type: "timestamp"
+      - name: _dbt_loaded_at
+        description: "Lineage"
+        data_type: "timestamp"
+      - name: _dbt_invocation_id
+        description: "Lineage"
+        data_type: "string"
+
+unit_tests:
+  # AT-18 (A11): the incremental filter never replaces a stored row with an older change, and still lets newer
+  # changes and new incidents through. The stored rows (`this`) are given as SQL, so dbt does not need fct_alert to
+  # exist yet: a dict fixture for `this` fails on the first build in a new dataset and skips fct_alert and everything after it.
+  - name: at18_older_change_does_not_overwrite
+    description: "INC-1 arrives with an older change than the stored row and must be skipped; INC-2 (new) and INC-3 (newer change) pass."
+    model: fct_alert
+    overrides:
+      macros:
+        is_incremental: true
+        tokenize: "cast(null as string)"   # no token key needed in a unit test
+    given:
+      - input: this
+        format: sql
+        rows: |
+          select 'INC-1' as incident_id, timestamp '2026-11-20 10:00:00' as _source_updated_at
+          union all
+          select 'INC-3', timestamp '2026-11-20 10:00:00'
+      - input: ref('int_alert__validated')
+        rows:
+          - {incident_id: INC-1, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, created_at: "2026-11-20 09:00:00", is_deleted: false, _dq_status: PASS, _source_updated_at: "2026-11-20 09:50:00"}
+          - {incident_id: INC-2, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, created_at: "2026-11-20 09:30:00", is_deleted: false, _dq_status: PASS, _source_updated_at: "2026-11-20 10:05:00"}
+          - {incident_id: INC-3, alert_id: ALR-D1-AT01, store_id: S1, device_id: D1, alert_type_id: AT01, created_at: "2026-11-20 08:00:00", is_deleted: false, _dq_status: PASS, _source_updated_at: "2026-11-20 10:10:00"}
+      - {input: ref('stg_g2__alert_history'), rows: []}
+      - {input: ref('dim_store'), rows: []}
+      - {input: ref('dim_alert_type'), rows: []}
+      - {input: ref('status'), rows: []}
+      - {input: ref('stg_g2__users'), rows: []}
+      - {input: ref('stg_g2__teams'), rows: []}
+    expect:
+      rows:
+        - {incident_id: INC-2, _source_updated_at: "2026-11-20 10:05:00"}
+        - {incident_id: INC-3, _source_updated_at: "2026-11-20 10:10:00"}

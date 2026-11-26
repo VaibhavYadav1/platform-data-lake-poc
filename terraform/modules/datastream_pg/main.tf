@@ -34,6 +34,14 @@ resource "google_datastream_connection_profile" "pg" {
       }
     }
   }
+
+  # The Datastream API returns serverVerification as {} (it never returns ca_certificate), so the provider drops the
+  # block from state and the next plan REPLACES this profile, and with it poc-cdc-stream: a new backfill into raw_g2
+  # (found 25 Nov in the A8 plan). Ignore ssl_config. If the Cloud SQL server CA is ever rotated, replace the profile
+  # on purpose (terraform apply -replace=...), with the stream paused.
+  lifecycle {
+    ignore_changes = [postgresql_profile[0].ssl_config]
+  }
 }
 
 # How to reach BigQuery: same project, nothing to configure.

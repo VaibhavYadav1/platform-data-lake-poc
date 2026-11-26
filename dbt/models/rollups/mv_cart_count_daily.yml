@@ -1,0 +1,26 @@
+version: 2
+models:
+  - name: mv_cart_count_daily
+    description: Cart activity per tenant, store and day - events, exit attempts and active wheels. dbt comparison table; the native materialized view is published to wh.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns: {combination_of_columns: [tenant_id, store_id, event_date]}
+    columns:
+      - name: tenant_id
+        description: "From fct_wheel_event"
+        data_type: "string"
+      - name: store_id
+        description: "From fct_wheel_event"
+        data_type: "string"
+      - name: event_date
+        description: "Partition column"
+        data_type: "date"
+        data_tests: [not_null]
+      - name: event_count
+        description: "COUNT of events"
+        data_type: "int64"
+      - name: exit_attempts
+        description: "Count of EXIT_ATTEMPT events"
+        data_type: "int64"
+      - name: active_wheels
+        description: "Wheels with an event that day"
+        data_type: "int64"
