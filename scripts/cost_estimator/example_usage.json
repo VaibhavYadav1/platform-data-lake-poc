@@ -1,0 +1,7 @@
+{
+  "region": "us-central1",
+  "storage": {"size": 5, "unit": "TiB", "duration_months": 1, "billing_model": "logical"},
+  "queries": {"per_day": 200, "operating_days": 22, "avg_data_per_query": 50, "unit": "GiB"},
+  "enterprise": {"enabled": false, "slots": 100, "mode": "autoscale", "hours_per_day": 8, "days_per_month": 22, "autoscale_utilization": 1.0},
+  "bi_engine": {"enabled": false, "capacity": 10, "unit": "GiB", "hours_per_day": 8, "days_per_month": 22}
+}

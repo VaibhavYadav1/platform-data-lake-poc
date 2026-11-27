@@ -37,3 +37,7 @@ credentials*.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Cost estimator output (generated reports)
+cost_report/
+scripts/cost_estimator/cost_report/

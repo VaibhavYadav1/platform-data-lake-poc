@@ -1,0 +1,1018 @@
+{
+  "_comment": "Test data only: responses recorded from the Cloud Billing Catalog API v1 on 2026-11-25 (USD, public list prices). The estimator never reads this file at run time.",
+  "services": [
+    {
+      "name": "services/24E6-581D-38E5",
+      "displayName": "BigQuery"
+    },
+    {
+      "name": "services/16B8-3DDA-9F10",
+      "displayName": "BigQuery Reservation API"
+    },
+    {
+      "name": "services/650B-3C82-34DB",
+      "displayName": "BigQuery BI Engine"
+    },
+    {
+      "name": "services/DCC9-8DB9-673F",
+      "displayName": "BigQuery Storage API"
+    }
+  ],
+  "skus": {
+    "BigQuery": [
+      {
+        "name": "services/24E6-581D-38E5/skus/0018-A5A0-9D6D",
+        "skuId": "0018-A5A0-9D6D",
+        "description": "Active Logical Storage (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "ActiveStorage",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.mo",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 10,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 23000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte month",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 2787004278374400.0
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/1DF5-1F98-1DD1",
+        "skuId": "1DF5-1F98-1DD1",
+        "description": "Analysis",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "OnDemandAnalysis",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us",
+          "europe"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "TiBy",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 1,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "6",
+                    "nanos": 250000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "tebibyte",
+              "baseUnit": "By",
+              "baseUnitDescription": "byte",
+              "baseUnitConversionFactor": 1099511627776
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "MULTI_REGIONAL",
+          "regions": [
+            "US",
+            "EU"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/3362-E469-6BEF",
+        "skuId": "3362-E469-6BEF",
+        "description": "Analysis (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "OnDemandAnalysis",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "TiBy",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 1,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "6",
+                    "nanos": 250000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "tebibyte",
+              "baseUnit": "By",
+              "baseUnitDescription": "byte",
+              "baseUnitConversionFactor": 1099511627776
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/529F-C35B-E521",
+        "skuId": "529F-C35B-E521",
+        "description": "Long-Term Physical Storage (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "PhysicalStorage",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.mo",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 10,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 20000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte month",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 2787004278374400.0
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/55B3-2F73-B6A3",
+        "skuId": "55B3-2F73-B6A3",
+        "description": "Long Term Logical Storage (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "LongTermStorage",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.mo",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 10,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 16000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte month",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 2787004278374400.0
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/947D-3B46-7781",
+        "skuId": "947D-3B46-7781",
+        "description": "Active Logical Storage",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "ActiveStorage",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us",
+          "europe"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.mo",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 10,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 20000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte month",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 2787004278374400.0
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "MULTI_REGIONAL",
+          "regions": [
+            "us-central1",
+            "us-central2",
+            "us-west1",
+            "europe-west1",
+            "europe-west4"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/D4B6-F772-0255",
+        "skuId": "D4B6-F772-0255",
+        "description": "Active Physical Storage (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "PhysicalStorage",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.mo",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 10,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 40000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte month",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 2787004278374400.0
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/E141-B443-33EE",
+        "skuId": "E141-B443-33EE",
+        "description": "Streaming Insert (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Streaming",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "MiBy",
+              "displayQuantity": 200,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 50000
+                  }
+                }
+              ],
+              "usageUnitDescription": "mebibyte",
+              "baseUnit": "By",
+              "baseUnitDescription": "byte",
+              "baseUnitConversionFactor": 1048576
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/24E6-581D-38E5/skus/FED8-23FC-20EF",
+        "skuId": "FED8-23FC-20EF",
+        "description": "Analysis Slots Attribution",
+        "category": {
+          "serviceDisplayName": "BigQuery",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "OnDemandAnalysis",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "global"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "mo",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                }
+              ],
+              "usageUnitDescription": "month",
+              "baseUnit": "s",
+              "baseUnitDescription": "second",
+              "baseUnitConversionFactor": 2595600
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "GLOBAL",
+          "regions": []
+        }
+      }
+    ],
+    "BigQuery Reservation API": [
+      {
+        "name": "services/16B8-3DDA-9F10/skus/5E94-CFA7-0B12",
+        "skuId": "5E94-CFA7-0B12",
+        "description": "BigQuery Enterprise Plus Edition for Iowa (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery Reservation API",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Edition",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 100000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "hour",
+              "baseUnit": "s",
+              "baseUnitDescription": "second",
+              "baseUnitConversionFactor": 3600
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/16B8-3DDA-9F10/skus/85AA-6B65-6D94",
+        "skuId": "85AA-6B65-6D94",
+        "description": "BigQuery Enterprise Edition for Iowa (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery Reservation API",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Edition",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 60000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "hour",
+              "baseUnit": "s",
+              "baseUnitDescription": "second",
+              "baseUnitConversionFactor": 3600
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/16B8-3DDA-9F10/skus/89B8-6E8C-2FCB",
+        "skuId": "89B8-6E8C-2FCB",
+        "description": "BigQuery Enterprise Edition 1 Year for Iowa (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery Reservation API",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Edition",
+          "usageType": "Commit1Yr"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 48000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "hour",
+              "baseUnit": "s",
+              "baseUnitDescription": "second",
+              "baseUnitConversionFactor": 3600
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/16B8-3DDA-9F10/skus/B8BE-01DC-0ECF",
+        "skuId": "B8BE-01DC-0ECF",
+        "description": "BigQuery Enterprise Edition 1 Year for US (multi-region)",
+        "category": {
+          "serviceDisplayName": "BigQuery Reservation API",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Edition",
+          "usageType": "Commit1Yr"
+        },
+        "serviceRegions": [
+          "us"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 48000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "hour",
+              "baseUnit": "s",
+              "baseUnitDescription": "second",
+              "baseUnitConversionFactor": 3600
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "MULTI_REGIONAL",
+          "regions": [
+            "us-central1",
+            "us-central2",
+            "us-west1"
+          ]
+        }
+      },
+      {
+        "name": "services/16B8-3DDA-9F10/skus/C0F6-38AB-6629",
+        "skuId": "C0F6-38AB-6629",
+        "description": "BigQuery Enterprise Edition for US (multi-region)",
+        "category": {
+          "serviceDisplayName": "BigQuery Reservation API",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Edition",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 60000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "hour",
+              "baseUnit": "s",
+              "baseUnitDescription": "second",
+              "baseUnitConversionFactor": 3600
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "MULTI_REGIONAL",
+          "regions": [
+            "us-central1",
+            "us-central2",
+            "us-west1"
+          ]
+        }
+      },
+      {
+        "name": "services/16B8-3DDA-9F10/skus/FB11-2FBB-FB57",
+        "skuId": "FB11-2FBB-FB57",
+        "description": "BigQuery Standard Edition for Iowa (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery Reservation API",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Edition",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 40000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "hour",
+              "baseUnit": "s",
+              "baseUnitDescription": "second",
+              "baseUnitConversionFactor": 3600
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      }
+    ],
+    "BigQuery BI Engine": [
+      {
+        "name": "services/650B-3C82-34DB/skus/2D3F-8043-D389",
+        "skuId": "2D3F-8043-D389",
+        "description": "BigQuery BI Engine for US",
+        "category": {
+          "serviceDisplayName": "BigQuery BI Engine",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "BigQueryBIEngine",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 41600000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte hour",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 3865470566400
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "US"
+          ]
+        }
+      },
+      {
+        "name": "services/650B-3C82-34DB/skus/6D0A-DFA7-D506",
+        "skuId": "6D0A-DFA7-D506",
+        "description": "BigQuery BI Engine Flat Rate for Iowa",
+        "category": {
+          "serviceDisplayName": "BigQuery BI Engine",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "BigQueryBIEngine",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 41600000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte hour",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 3865470566400
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      },
+      {
+        "name": "services/650B-3C82-34DB/skus/D8B4-E933-8B8A",
+        "skuId": "D8B4-E933-8B8A",
+        "description": "BigQuery BI Engine for Iowa",
+        "category": {
+          "serviceDisplayName": "BigQuery BI Engine",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "BigQueryBIEngine",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy.h",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 41600000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte hour",
+              "baseUnit": "By.s",
+              "baseUnitDescription": "byte second",
+              "baseUnitConversionFactor": 3865470566400
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-24T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      }
+    ],
+    "BigQuery Storage API": [
+      {
+        "name": "services/DCC9-8DB9-673F/skus/3BF6-FB49-384A",
+        "skuId": "3BF6-FB49-384A",
+        "description": "BigQuery Storage API - Write (us-central1)",
+        "category": {
+          "serviceDisplayName": "BigQuery Storage API",
+          "resourceFamily": "ApplicationServices",
+          "resourceGroup": "Streaming",
+          "usageType": "OnDemand"
+        },
+        "serviceRegions": [
+          "us-central1"
+        ],
+        "pricingInfo": [
+          {
+            "summary": "",
+            "pricingExpression": {
+              "usageUnit": "GiBy",
+              "displayQuantity": 1,
+              "tieredRates": [
+                {
+                  "startUsageAmount": 0,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 0
+                  }
+                },
+                {
+                  "startUsageAmount": 2048,
+                  "unitPrice": {
+                    "currencyCode": "USD",
+                    "units": "0",
+                    "nanos": 25000000
+                  }
+                }
+              ],
+              "usageUnitDescription": "gibibyte",
+              "baseUnit": "By",
+              "baseUnitDescription": "byte",
+              "baseUnitConversionFactor": 1073741824
+            },
+            "aggregationInfo": {
+              "aggregationLevel": "ACCOUNT",
+              "aggregationInterval": "MONTHLY",
+              "aggregationCount": 1
+            },
+            "currencyConversionRate": 1,
+            "effectiveTime": "2026-11-27T08:00:00Z"
+          }
+        ],
+        "serviceProviderName": "Google",
+        "geoTaxonomy": {
+          "type": "REGIONAL",
+          "regions": [
+            "us-central1"
+          ]
+        }
+      }
+    ]
+  }
+}
