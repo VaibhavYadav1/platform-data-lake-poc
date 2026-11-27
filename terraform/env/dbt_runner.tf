@@ -7,7 +7,7 @@
 variable "image_tag" {
   description = "Git commit SHA of the dbt-runner image. Cloud Build sets it as TF_VAR_image_tag; by hand: -var image_tag=<sha>."
   type        = string
-  default     = ""
+  default     = "latest"  # Changed from "" to "latest" for local development
 }
 
 resource "google_cloud_run_v2_job" "dbt_runner" {
@@ -49,7 +49,7 @@ resource "google_cloud_run_v2_job" "dbt_runner" {
   lifecycle {
     precondition {
       condition     = var.image_tag != ""
-      error_message = "image_tag is empty: the dbt-runner image is tagged with the commit SHA. Pass -var image_tag=<sha> (Cloud Build sets TF_VAR_image_tag)."
+      error_message = "image_tag cannot be empty. Set via -var image_tag=<sha> or use default 'latest'."
     }
   }
 }
