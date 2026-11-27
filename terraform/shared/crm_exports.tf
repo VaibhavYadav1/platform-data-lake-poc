@@ -3,9 +3,11 @@
 #   poc-source-simulator (sa-simulator)  --writes-->  gs://<project>-crm-exports/crm/export_ts=<ts>/{3 CSVs, manifest.json}
 #   poc-crm-loader       (sa-crm-loader) --reads-->   the same folders; one folder is loaded once, only when its manifest exists
 #
-# While dbt is not ready, poc-crm-loader-hourly (below) starts the loader alone, once an hour at minute 10 (the simulator
-# writes at minute 0-4). When the micro-batch workflow (terraform/env, run_crm_loader) takes over, pause or remove it:
-# two callers could run two loaders at once. Its arguments are fixed here and nowhere else.
+# This stack is the only owner of the poc-crm-loader job (terraform/env must not define it). The loader needs explicit
+# arguments (--bucket ...): it reads no environment variables, so a start without them exits with code 2.
+# poc-crm-loader-hourly (below) starts the loader alone, once an hour at minute 10 (the simulator writes at minute 0-4).
+# The micro-batch workflow (run_crm_loader) also calls the job, with the same arguments. Run only one of the two
+# callers at a time: two loaders at once can double an export (there is no lock yet).
 #
 # The bucket is separate from gks-datalake-poc2-dev-crm-test, which stays for hand tests. Nothing here touches that bucket.
 

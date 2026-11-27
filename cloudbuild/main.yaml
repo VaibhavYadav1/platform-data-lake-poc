@@ -94,7 +94,6 @@ steps:
     entrypoint: sh
     env:
       - TF_VAR_image_tag=$COMMIT_SHA
-      - TF_VAR_crm_loader_image_tag=latest
     args:
       - -c
       - |
@@ -110,7 +109,6 @@ steps:
     entrypoint: sh
     env:
       - TF_VAR_image_tag=$COMMIT_SHA
-      - TF_VAR_crm_loader_image_tag=latest
     args:
       - -c
       - |
