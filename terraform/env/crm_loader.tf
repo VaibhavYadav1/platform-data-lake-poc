@@ -6,7 +6,7 @@
 # Until the Dockerfile exists, the job uses a placeholder image (python:3.12-slim).
 
 variable "crm_loader_image_tag" {
-  description = "Docker image tag for the crm-loader image. Cloud Build sets it as TF_VAR_image_tag. Use 'latest' until the first real image is built."
+  description = "Docker image tag for the crm-loader image. Cloud Build sets it as TF_VAR_crm_loader_image_tag. Defaults to latest."
   type        = string
   default     = "latest"
 }
