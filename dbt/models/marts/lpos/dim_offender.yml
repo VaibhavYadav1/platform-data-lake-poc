@@ -1,6 +1,8 @@
 version: 2
 models:
   - name: dim_offender
+    config:
+      enabled: false  # Disabled: depends on stg_lpos__case_event
     description: One row per (tenant, offender token) with first and last seen and the case count. No names or images.
     columns:
       - name: offender_key

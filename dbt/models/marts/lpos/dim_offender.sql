@@ -1,3 +1,5 @@
+{{ config(enabled=false) }}
+{# Disabled: depends on stg_lpos__case_event which is not available #}
 -- Repeat offenders per tenant. Per tenant on purpose: one tenant cannot learn that a token exists at another.
 select
   {{ dbt_utils.generate_surrogate_key(['st.tenant_id', 'e.offender_token']) }} as offender_key,

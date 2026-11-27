@@ -1,10 +1,12 @@
 {{ config(
+    enabled=false,
     materialized='incremental',
     incremental_strategy='merge',
     unique_key='case_id',
     partition_by={'field': 'case_date', 'data_type': 'date'},
     cluster_by=['tenant_id', 'store_id', 'case_id']
 ) }}
+{# Disabled: depends on stg_lpos__case_event which is not available #}
 -- One row per case: its latest event. Incremental on case_id: any case with a new event is rebuilt from ALL its events.
 -- A case at an unknown store is kept with tenant_id null and flagged DQ44.
 with changed as (

@@ -1,6 +1,8 @@
 version: 2
 models:
   - name: fct_case
+    config:
+      enabled: false  # Disabled: depends on stg_lpos__case_event
     description: One row per loss-prevention case, from its latest event. Duplicated events count once. Incremental merge on case_id.
     columns:
       - name: case_id

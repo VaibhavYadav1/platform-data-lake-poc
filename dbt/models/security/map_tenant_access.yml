@@ -1,6 +1,8 @@
 version: 2
 models:
   - name: map_tenant_access
+    config:
+      enabled: false  # Disabled: depends on stg_g2__store_access
     description: >
       One row per (principal, tenant). Published to sec_{env}; tenant readers can read it (spike 1), so it holds
       a hash of the email, never the email.

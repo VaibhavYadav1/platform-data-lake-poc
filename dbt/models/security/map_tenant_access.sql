@@ -1,3 +1,5 @@
+{{ config(enabled=false) }}
+{# Disabled: depends on stg_g2__store_access which is not available #}
 -- Who may see which tenant. Row access policies filter on it with SESSION_USER() (D3, D4).
 -- A grant on a child account gives its top-level tenant, and only customer accounts may be tenants (AT-19 check 2).
 --
