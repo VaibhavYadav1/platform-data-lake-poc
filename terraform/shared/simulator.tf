@@ -1,4 +1,4 @@
-# A8: the source simulator in the cloud (POC A guide 10.6, docs/poc2/A8_STEPS.md).
+# A8/A9: the source simulator in the cloud (POC A guide 10.6, docs/poc2/A8_STEPS.md).
 # One for the whole sandbox, like the stream, so it lives in shared, not env.
 #
 #   Cloud Scheduler poc-simulator-tick (*/5, as sa-orchestrator, created PAUSED)
@@ -6,6 +6,17 @@
 #
 # Prerequisites: poc-ops-db and its simulator secret (A1, A2), the image in Artifact Registry repo "poc"
 # (built by hand from simulator/ until CD, E2), sa-orchestrator (by hand until D2).
+#
+# A9: sim_g2_datalake dataset for wheel and wheel_event data (task A9).
+# Tables (wheel, wheel_event, derived_alert) are created by simulator/create_sim_g2_datalake.py
+
+resource "google_bigquery_dataset" "sim_g2_datalake" {
+  project     = var.project_id
+  dataset_id  = "sim_g2_datalake"
+  location    = var.region
+  description = "Simulated G2 data lake (A9): wheel, wheel_event, derived_alert. Stand-in for the client's g2_datalake."
+  labels      = { poc = "a", layer = "source", source = "sim_g2_datalake", managed_by = "terraform" }
+}
 
 variable "simulator_image" {
   description = "poc-source-simulator image, built from simulator/: us-central1-docker.pkg.dev/<project>/poc/poc-source-simulator:<git sha>."
@@ -39,6 +50,14 @@ resource "google_service_account" "simulator" {
   account_id   = "sa-simulator"
   display_name = "POC source simulator (A8)"
   description  = "Runs poc-source-simulator: writes G2 in poc-ops-db, publishes case events, writes CRM exports."
+}
+
+# A9: simulator writes wheel and wheel_event to sim_g2_datalake
+resource "google_bigquery_dataset_iam_member" "simulator_writes_datalake" {
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.sim_g2_datalake.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.simulator.email}"
 }
 
 # Cloud SQL connection (the job's /cloudsql socket) and the simulator_user password
@@ -93,13 +112,15 @@ resource "google_cloud_run_v2_job" "simulator" {
         # socket and injects the password, so the simulator connects with plain psycopg.
         dynamic "env" {
           for_each = {
-            MODE       = "tick"
-            RATE       = tostring(var.simulator_rate)
-            PG_HOST    = "/cloudsql/${module.cloudsql_g2.connection_name}"
-            PG_DB      = "g2"
-            PG_USER    = "simulator_user"
-            CASE_TOPIC = var.simulator_case_topic
-            CRM_BUCKET = var.simulator_crm_bucket
+            MODE         = "tick"
+            RATE         = tostring(var.simulator_rate)
+            PG_HOST      = "/cloudsql/${module.cloudsql_g2.connection_name}"
+            PG_DB        = "g2"
+            PG_USER      = "simulator_user"
+            CASE_TOPIC   = var.simulator_case_topic
+            CRM_BUCKET   = var.simulator_crm_bucket
+            G2DL_PROJECT = var.project_id
+            G2DL_DATASET = google_bigquery_dataset.sim_g2_datalake.dataset_id
           }
           content {
             name  = env.key
@@ -124,6 +145,7 @@ resource "google_cloud_run_v2_job" "simulator" {
     google_project_iam_member.simulator_sql_client,
     google_secret_manager_secret_iam_member.simulator_password,
     google_storage_bucket_iam_member.simulator_writes_crm,
+    google_bigquery_dataset_iam_member.simulator_writes_datalake,
   ]
 }
 
@@ -169,4 +191,8 @@ resource "google_cloud_scheduler_job" "simulator_tick" {
 
 output "simulator_service_account" {
   value = google_service_account.simulator.email
+}
+
+output "sim_g2_datalake_dataset_id" {
+  value = google_bigquery_dataset.sim_g2_datalake.dataset_id
 }

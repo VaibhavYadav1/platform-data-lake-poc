@@ -8,3 +8,6 @@
 data-lake-schema==1.0.0
 
 psycopg[binary]>=3.2,<4
+
+# sim_g2_datalake writer (A9): BigQuery load jobs; same pin as scripts/requirements.txt
+google-cloud-bigquery>=3.25

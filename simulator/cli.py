@@ -1,4 +1,4 @@
-"""Command line: python -m simulator seed|batch|crm-export|case-events|tick. probe and revoke/grant come with A8, AT-25."""
+"""Command line: python -m simulator seed|batch|crm-export|case-events|wheel-seed|wheel-events|tick. probe and revoke/grant come with A8, AT-25."""
 
 import argparse
 import json
@@ -7,7 +7,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .config import Settings
+from .config import LakeSettings, Settings
 from .crm_export import CRMExportError, CRMState, generate_export, upload_to_gcs, write_export_folder
 from .db import connect
 from .seed import SeedError, seed
@@ -50,6 +50,16 @@ def parse_args(argv):
     ce.add_argument("--topic", required=True, help="full topic path: projects/PROJECT/topics/TOPIC")
     ce.add_argument("--count", type=int, default=5, help="number of events to publish (default: 5)")
     ce.add_argument("--seed", type=int, help="random seed for reproducibility")
+
+    # Wheel seed command (A9)
+    w = sub.add_parser("wheel-seed", help="seed sim_g2_datalake.wheel from the active G2 stores (task A9)")
+    w.add_argument("--seed", type=int, default=42, help="random seed for reproducibility")
+    w.add_argument("--reset", action="store_true", help="replace existing wheel rows")
+
+    # Wheel events command (A9)
+    e = sub.add_parser("wheel-events", help="append one tick of sim_g2_datalake.wheel_event rows by load job (task A9)")
+    e.add_argument("--rate", type=float, default=1.0, help="multiplier on the 50-200 rows per tick (RATE)")
+    e.add_argument("--seed", type=int, default=None, help="random seed (default: random)")
 
     # Tick command (A8)
     t = sub.add_parser("tick", help="run one continuous-mode tick (task A8)")
@@ -152,6 +162,25 @@ def main(argv=None):
             print(f"error: {e}")
             import traceback
             traceback.print_exc()
+            return 1
+
+    # sim_g2_datalake commands (A9): BigQuery settings come from G2DL_PROJECT/GCP_PROJECT, G2DL_DATASET, G2DL_LOCATION
+    if args.command in ("wheel-seed", "wheel-events"):
+        from . import wheel_writer
+        lake = LakeSettings.from_env()
+        print(f"Lake: {lake.describe()}")
+        try:
+            if args.command == "wheel-events":
+                print(f"appended {wheel_writer.append_events(lake, args.rate, args.seed)} wheel_event rows")
+                return 0
+            # wheel-seed: fetch active stores from raw_g2 (BigQuery), not PostgreSQL
+            print(f"Reading active stores from {lake.raw_g2_project}.{lake.raw_g2_dataset}.g2_stores...")
+            stores = wheel_writer.active_store_ids(lake)
+            print(f"loaded {wheel_writer.seed_wheels(lake, stores, args.seed, args.reset)} wheel rows "
+                  f"for {len(stores)} active stores")
+            return 0
+        except wheel_writer.WheelWriterError as e:
+            print(f"error: {e}")
             return 1
 
     if args.command == "tick":

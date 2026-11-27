@@ -38,3 +38,34 @@ class Settings:
         if self.instance:
             return f"Cloud SQL {self.instance}, database {self.db}, user {self.user}"
         return f"{self.host}:{self.port}, database {self.db}, user {self.user}"
+
+
+# ---- sim_g2_datalake (task A9): BigQuery target of the wheel writer. Same defaults as loaders/crm/create_raw_crm.py ----
+DEFAULT_LAKE_PROJECT = "gks-datalake-poc2-dev"
+DEFAULT_LAKE_LOCATION = "us-central1"
+DEFAULT_LAKE_DATASET = "sim_g2_datalake"  # dbt: var g2dl_dataset
+
+
+@dataclass(frozen=True)
+class LakeSettings:
+    project: str
+    dataset: str
+    location: str
+    raw_g2_project: str = DEFAULT_LAKE_PROJECT  # where raw_g2 (Datastream landing) lives: the stores come from there
+    raw_g2_dataset: str = "raw_g2"  # dbt: var g2_raw_dataset
+
+    @classmethod
+    def from_env(cls, env=None):
+        env = os.environ if env is None else env
+        main_project = env.get("GCP_PROJECT") or DEFAULT_LAKE_PROJECT  # as dbt/profiles.yml
+        return cls(
+            # G2DL_PROJECT matches dbt's g2dl_project (the lake's project); otherwise the main project
+            project=env.get("G2DL_PROJECT") or main_project,
+            dataset=env.get("G2DL_DATASET", DEFAULT_LAKE_DATASET),
+            location=env.get("G2DL_LOCATION", DEFAULT_LAKE_LOCATION),
+            raw_g2_project=main_project,
+            raw_g2_dataset=env.get("G2_RAW_DATASET", "raw_g2"),
+        )
+
+    def describe(self):
+        return f"BigQuery {self.project}.{self.dataset} ({self.location})"
